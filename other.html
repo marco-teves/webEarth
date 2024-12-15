@@ -1,6 +1,17 @@
 <!DOCTYPE HTML>
 <html lang="en">
 <head>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
 <title> Sphere </title>
 <meta charset="utf-8">
 <script src="glMatrix.js"></script>
@@ -32,6 +43,8 @@ var sphereIndexPositionBuffer;
 var modelViewMatrix;
 var projectionMatrix;
 var modelViewMatrixStack;
+
+var rotationAngle = 0;
 function createGLContext(canvas) {
     var names = ["webgl", "experimental-webgl"];
     var context = null;
@@ -364,7 +377,10 @@ function draw() {
 
     mat4.perspective(60, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, projectionMatrix);
     mat4.identity(modelViewMatrix);
+
+    // Apply a single rotation transformation to the entire scene
     mat4.lookAt([0, 5, -20], [0, 0, 0], [0, 1, 0], modelViewMatrix);
+    mat4.rotateY(modelViewMatrix, rotationAngle); // Rotate around the Y-axis
 
     pushModelViewMatrix();
     uploadModelViewMatrixToShader();
@@ -383,6 +399,7 @@ function draw() {
     // Attach left panel
     pushModelViewMatrix();
     mat4.translate(modelViewMatrix, [0, 2.8, 0]); // Move to cylinder's end
+    mat4.rotateY(modelViewMatrix, Math.PI / 1.5);
     uploadModelViewMatrixToShader();
     drawPanel(1.0, 0.0, 0.0, 1.0); // Red panel
     popModelViewMatrix();
@@ -399,7 +416,7 @@ function draw() {
     // Attach right panel
     pushModelViewMatrix();
     mat4.translate(modelViewMatrix, [0, -2.8, 0]); // Move to cylinder's end
-    mat4.rotateY(modelViewMatrix, Math.PI / 1.5);  
+    mat4.rotateY(modelViewMatrix, Math.PI / 1.5);
     uploadModelViewMatrixToShader();
     drawPanel(0.0, 1.0, 0.0, 1.0); // Green panel
     popModelViewMatrix();
@@ -407,6 +424,20 @@ function draw() {
     popModelViewMatrix();
 
     popModelViewMatrix();
+}
+
+function animate() {
+    // Update the global rotation angle
+    rotationAngle += 0.01; // Increment rotation angle
+    if (rotationAngle > 2 * Math.PI) {
+        rotationAngle -= 2 * Math.PI; // Keep it within a full circle
+    }
+}
+
+function tick() {
+    requestAnimationFrame(tick);
+    draw();
+    animate();
 }
 
 
@@ -417,12 +448,14 @@ function startup() {
     setupBuffers();
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
     gl.enable(gl.DEPTH_TEST);
-    draw();
+
+    // Start the render loop
+    tick();
 }
 </script>
 </head>
 <body onload="startup();">
-<canvas id="myGLCanvas" width="800" height="600"></canvas>
+<canvas id="myGLCanvas" width="1000" height="800"></canvas>
 
 </body>
 </html>
