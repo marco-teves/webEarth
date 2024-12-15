@@ -43,8 +43,11 @@ var sphereIndexPositionBuffer;
 var modelViewMatrix;
 var projectionMatrix;
 var modelViewMatrixStack;
+var satelliteAngle = 0; 
+var panelVertexPositionBuffer;
+var panelIndexBuffer;
 
-var rotationAngle = 0;
+
 function createGLContext(canvas) {
     var names = ["webgl", "experimental-webgl"];
     var context = null;
@@ -238,9 +241,9 @@ function setupCylinderBuffers() {
     cylinderVertexPositionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, cylinderVertexPositionBuffer);
     
-    var radius = 0.1; // Cylinder radius
-    var height = 1.5; // Cylinder height
-    var numSegments = 36; // Number of segments for the circular base
+    var radius = 0.1;
+    var height = 1.5;
+    var numSegments = 36;
     var cylinderVertices = [];
     var angleStep = (2 * Math.PI) / numSegments;
 
@@ -281,8 +284,7 @@ function setupCylinderBuffers() {
     cylinderIndexPositionBuffer.itemSize = 3;
     cylinderIndexPositionBuffer.numberOfItems = cylinderIndices.length;
 }
-let panelVertexPositionBuffer;
-let panelIndexBuffer;
+
 
 function setupPanelBuffers() {
     panelVertexPositionBuffer = gl.createBuffer();
@@ -317,14 +319,19 @@ function setupPanelBuffers() {
 function setupBuffers() {
     setupEarthBuffers();
     setupCubeBuffers();
-    setupCylinderBuffers();
+
+    // Set up cylinder buffers with different radii
+    setupCylinderBuffers(0.1); // Default cylinder radius
+    setupCylinderBuffers(0.2); // Larger cylinder radius
+
     setupPanelBuffers();
 }
-    function uploadModelViewMatrixToShader() {
+
+function uploadModelViewMatrixToShader() {
     gl.uniformMatrix4fv(shaderProgram.uniformMVMatrix, false,
     modelViewMatrix);
 }
-    function uploadProjectionMatrixToShader() {
+function uploadProjectionMatrixToShader() {
     gl.uniformMatrix4fv(shaderProgram.uniformProjMatrix,
     false, projectionMatrix);
 }
@@ -352,7 +359,6 @@ function drawCube(r,g,b,a) {
 }
 
 function drawCylinder(r,g,b,a) {
-    
     gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
     gl.bindBuffer(gl.ARRAY_BUFFER, cylinderVertexPositionBuffer);
     gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
@@ -363,6 +369,7 @@ function drawCylinder(r,g,b,a) {
     gl.UNSIGNED_SHORT, 0);
 }
 
+
 function drawPanel(r, g, b, a) {
     gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
     gl.bindBuffer(gl.ARRAY_BUFFER, panelVertexPositionBuffer);
@@ -371,20 +378,7 @@ function drawPanel(r, g, b, a) {
     gl.drawElements(gl.TRIANGLES, panelIndexBuffer.numberOfItems, gl.UNSIGNED_SHORT, 0);
 }
 
-function draw() {
-    gl.viewport(10, 10, gl.viewportWidth, gl.viewportHeight);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-    mat4.perspective(60, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, projectionMatrix);
-    mat4.identity(modelViewMatrix);
-
-    // Apply a single rotation transformation to the entire scene
-    mat4.lookAt([0, 5, -20], [0, 0, 0], [0, 1, 0], modelViewMatrix);
-    mat4.rotateY(modelViewMatrix, rotationAngle); // Rotate around the Y-axis
-
-    pushModelViewMatrix();
-    uploadModelViewMatrixToShader();
-    uploadProjectionMatrixToShader();
+function drawSatellite() {
 
     // Draw Cube
     drawCube(1.0, 1.0, 0.0, 1.0);
@@ -416,29 +410,40 @@ function draw() {
     // Attach right panel
     pushModelViewMatrix();
     mat4.translate(modelViewMatrix, [0, -2.8, 0]); // Move to cylinder's end
-    mat4.rotateY(modelViewMatrix, Math.PI / 1.5);
+    mat4.rotateY(modelViewMatrix, Math.PI / 1.5);  
     uploadModelViewMatrixToShader();
     drawPanel(0.0, 1.0, 0.0, 1.0); // Green panel
     popModelViewMatrix();
 
     popModelViewMatrix();
 
+
+    pushModelViewMatrix();
+    mat4.translate(modelViewMatrix, [0, 0, -3]); // Position right cylinder
+    mat4.rotateX(modelViewMatrix, Math.PI / 2);   // Orient cylinder along x-axis
+    uploadModelViewMatrixToShader();
+    drawCylinder(0.0, 1.0, 1.0, 1.0); // Blue cylinder
+    
     popModelViewMatrix();
 }
 
-function animate() {
-    // Update the global rotation angle
-    rotationAngle += 0.01; // Increment rotation angle
-    if (rotationAngle > 2 * Math.PI) {
-        rotationAngle -= 2 * Math.PI; // Keep it within a full circle
-    }
+function drawScene() {
+    
+    gl.viewport(10, 10, gl.viewportWidth, gl.viewportHeight);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    mat4.perspective(60, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, projectionMatrix);
+    mat4.identity(modelViewMatrix);
+    mat4.lookAt([0, 5, -20], [0, 0, 0], [0, 1, 0], modelViewMatrix);
+
+    pushModelViewMatrix();
+    uploadModelViewMatrixToShader();
+    uploadProjectionMatrixToShader();
+    //drawEarth(0.0, 0.0, 1.0, 1.0);
+    drawSatellite();
+    
 }
 
-function tick() {
-    requestAnimationFrame(tick);
-    draw();
-    animate();
-}
 
 
 function startup() {
@@ -448,9 +453,8 @@ function startup() {
     setupBuffers();
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
     gl.enable(gl.DEPTH_TEST);
-
-    // Start the render loop
-    tick();
+    drawScene();
+    
 }
 </script>
 </head>
