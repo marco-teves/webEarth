@@ -18,20 +18,21 @@
     <script src="webgl-debug.js"></script>
     <script id="shader-vs" type="x-shader/x-vertex">
         attribute vec3 aVertexPosition;
-        attribute vec4 aVertexColor;
+        attribute vec2 aTextureCoord;
         uniform mat4 uMVMatrix;
         uniform mat4 uPMatrix;
-        varying vec4 vColor;
+        varying vec2 vTextureCoord;
         void main() {
             gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
-            vColor = aVertexColor;
+            vTextureCoord = aTextureCoord;
         }
     </script>
     <script id="shader-fs" type="x-shader/x-fragment">
         precision mediump float;
-        varying vec4 vColor;
+        varying vec2 vTextureCoord;
+        uniform sampler2D uSampler;
         void main() {
-            gl_FragColor = vColor;
+            gl_FragColor = texture2D(uSampler, vTextureCoord);
         }
     </script>
     <script type="text/javascript">
@@ -40,6 +41,9 @@
         var shaderProgram;
         var sphereVertexPositionBuffer;
         var sphereIndexPositionBuffer;
+        var sphereVertexTextureCoordBuffer;
+        var earthTexture;
+        var cubeTexture;
         var modelViewMatrix;
         var projectionMatrix;
         var modelViewMatrixStack;
@@ -106,13 +110,15 @@
             }
             gl.useProgram(shaderProgram);
             shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
-            shaderProgram.vertexColorAttribute = gl.getAttribLocation(shaderProgram, "aVertexColor");
+            shaderProgram.textureCoordAttribute = gl.getAttribLocation(shaderProgram, "aTextureCoord");
             shaderProgram.uniformMVMatrix = gl.getUniformLocation(shaderProgram, "uMVMatrix");
             shaderProgram.uniformProjMatrix = gl.getUniformLocation(shaderProgram, "uPMatrix");
+            shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler");
             modelViewMatrix = mat4.create();
             projectionMatrix = mat4.create();
             modelViewMatrixStack = [];
             gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+            gl.enableVertexAttribArray(shaderProgram.textureCoordAttribute);
         }
 
         function pushModelViewMatrix() {
@@ -128,36 +134,41 @@
         }
 
         function setupEarthBuffers() {
-            //using gl.Triangles (drawElements) to draw a sphere
             sphereVertexPositionBuffer = gl.createBuffer();
             gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexPositionBuffer);
             var sphereVertexPosition = [];
-            var r = 3 // radius
-            //choosing an arbitrary value for m and n
+            var sphereTextureCoord = [];
+            var r = 3; // radius
             var m = 15;
             var n = 15;
-            // calculate the vertex coordinates
             for (var i = 0; i <= m; i++) {
                 for (var j = 0; j <= n; j++) {
-                    //calculate x, y and z here
-                    //x=r*(Math.sin(theta))*(Math.cos(phi));
-                    x = r * Math.sin(i * Math.PI / m) * Math.cos(2 * j * Math.PI / n)
-                    //y=(r*(Math.cos(theta)));
-                    y = r * Math.cos(i * Math.PI / m);
-                    //z=(r*(Math.sin(theta))*(Math.sin(phi)));
-                    z = r * Math.sin(i * Math.PI / m) * Math.sin(2 * j * Math.PI / n);
+                    var theta = i * Math.PI / m;
+                    var phi = j * 2 * Math.PI / n;
+                    var x = r * Math.sin(theta) * Math.cos(phi);
+                    var y = r * Math.cos(theta);
+                    var z = r * Math.sin(theta) * Math.sin(phi);
                     sphereVertexPosition.push(x);
                     sphereVertexPosition.push(y);
                     sphereVertexPosition.push(z);
+                    var u = j / n;
+                    var v = i / m;
+                    sphereTextureCoord.push(u);
+                    sphereTextureCoord.push(v);
                 }
             }
-            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereVertexPosition),
-                gl.STATIC_DRAW);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereVertexPosition), gl.STATIC_DRAW);
             sphereVertexPositionBuffer.itemSize = 3;
             sphereVertexPositionBuffer.numberOfItems = (m + 1) * (n + 1);
+
+            sphereVertexTextureCoordBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexTextureCoordBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereTextureCoord), gl.STATIC_DRAW);
+            sphereVertexTextureCoordBuffer.itemSize = 2;
+            sphereVertexTextureCoordBuffer.numberOfItems = (m + 1) * (n + 1);
+
             sphereIndexPositionBuffer = gl.createBuffer();
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphereIndexPositionBuffer);
-            //generate the indices of the triangle
             var sphereIndexPosition = [];
             for (var i = 0; i < m; i++) {
                 for (var j = 0; j < n; j++) {
@@ -165,62 +176,37 @@
                     var v2 = v1 + n + 1;
                     var v3 = v1 + 1;
                     var v4 = v2 + 1;
-                    //triangle 1
                     sphereIndexPosition.push(v1);
                     sphereIndexPosition.push(v2);
                     sphereIndexPosition.push(v3);
-                    //triangle 2
                     sphereIndexPosition.push(v3);
                     sphereIndexPosition.push(v2);
                     sphereIndexPosition.push(v4);
                 }
             }
-            //console.log(sphereIndexPosition);
-            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new
-                Uint16Array(sphereIndexPosition),
-                gl.STATIC_DRAW);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(sphereIndexPosition), gl.STATIC_DRAW);
             sphereIndexPositionBuffer.itemSize = 3;
             sphereIndexPositionBuffer.numberOfItems = m * n * 2 * 3;
-            //calculate vertex normals
-            var sphereNormalData = [];
-            for (var i = 0; i <= m; i++) {
-                for (var j = 0; j <= n; j++) {
-                    //nx=Math.sin(theta)*Math.cos(theta);
-                    nx = (Math.sin((i * Math.PI) / m)) * (Math.cos((2 * j * Math.PI) / n));
-                    //ny=Math.cos(theta);
-                    ny = (Math.cos((i * Math.PI) / m));
-                    //nz=Math.sin(theta)*Math.sin(phi);
-                    nz = (Math.sin((i * Math.PI) / m)) * (Math.sin((2 * j * Math.PI) / n));
-                    sphereNormalData.push(nx);
-                    sphereNormalData.push(ny);
-                    sphereNormalData.push(nz);
-                }
-            }
-            //console.log(sphereNormalData);
         }
 
         function setupCubeBuffers() {
             cubeVertexPositionBuffer = gl.createBuffer();
             gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
             var cubeVertexPosition = [
-                3.0, 3.0, 3.0, //v0
-                -3.0, 3.0, 3.0, //v1
-                -3.0, -3.0, 3.0, //v2
-                3.0, -3.0, 3.0, //v3
-                3.0, 3.0, -3.0, //v4
-                -3.0, 3.0, -3.0, //v5
-                -3.0, -3.0, -3.0, //v6
-                3.0, -3.0, -3.0, //v7
+                2.0, 2.0, 2.0, //v0
+                -2.0, 2.0, 2.0, //v1
+                -2.0, -2.0, 2.0, //v2
+                2.0, -2.0, 2.0, //v3
+                2.0, 2.0, -2.0, //v4
+                -2.0, 2.0, -2.0, //v5
+                -2.0, -2.0, -2.0, //v6
+                2.0, -2.0, -2.0, //v7
             ];
-            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertexPosition),
-                gl.STATIC_DRAW);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertexPosition), gl.STATIC_DRAW);
             cubeVertexPositionBuffer.itemSize = 3;
             cubeVertexPositionBuffer.numberOfItems = 8;
             cubeVertexIndexBuffer = gl.createBuffer();
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
-
-            //For simplicity, each face will be drawn as gl_TRIANGLES, therefore
-            //the indices for each triangle are specified.
             var cubeVertexIndices = [
                 0, 1, 2, 0, 2, 3, // Front face
                 4, 6, 5, 4, 7, 6, // Back face
@@ -229,8 +215,7 @@
                 0, 5, 1, 0, 4, 5, //top
                 3, 2, 6, 3, 6, 7 //bottom
             ];
-            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cubeVertexIndices),
-                gl.STATIC_DRAW);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cubeVertexIndices), gl.STATIC_DRAW);
             cubeVertexIndexBuffer.itemSize = 1;
             cubeVertexIndexBuffer.numberOfItems = 36;
         }
@@ -241,52 +226,61 @@
         }
 
         function uploadModelViewMatrixToShader() {
-            gl.uniformMatrix4fv(shaderProgram.uniformMVMatrix, false,
-                modelViewMatrix);
+            gl.uniformMatrix4fv(shaderProgram.uniformMVMatrix, false, modelViewMatrix);
         }
 
         function uploadProjectionMatrixToShader() {
-            gl.uniformMatrix4fv(shaderProgram.uniformProjMatrix,
-                false, projectionMatrix);
+            gl.uniformMatrix4fv(shaderProgram.uniformProjMatrix, false, projectionMatrix);
         }
 
-        function drawEarth(r, g, b, a) {
-            // Set color
-            gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
+        function drawEarth() {
             gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexPositionBuffer);
-            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
-                sphereVertexPositionBuffer.itemSize,
-                gl.FLOAT, false, 0, 0);
+            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, sphereVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexTextureCoordBuffer);
+            gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, sphereVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, earthTexture);
+            gl.uniform1i(shaderProgram.samplerUniform, 0);
+
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphereIndexPositionBuffer);
-            gl.drawElements(gl.TRIANGLES, sphereIndexPositionBuffer.numberOfItems,
-                gl.UNSIGNED_SHORT, 0);
+            gl.drawElements(gl.TRIANGLES, sphereIndexPositionBuffer.numberOfItems, gl.UNSIGNED_SHORT, 0);
         }
 
-        function drawCube(r, g, b, a) {
-            // Disable vertex attrib array and use constant color for the cube.
-            gl.disableVertexAttribArray(shaderProgram.vertexColorAttribute);
-            // Set color
-            gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
+        function drawCube() {
             gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
-            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
-                cubeVertexPositionBuffer.itemSize,
-                gl.FLOAT, false, 0, 0);
+            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, cubeVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
-            gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numberOfItems,
-                gl.UNSIGNED_SHORT, 0);
+            gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numberOfItems, gl.UNSIGNED_SHORT, 0);
+        }
+
+        function drawCylinder() {
+            gl.bindBuffer(gl.ARRAY_BUFFER, cylinderVertexPositionBuffer);
+            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, cylinderVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, cylinderVertexTextureCoordBuffer);
+            gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, cylinderVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, cylinderTexture);
+            gl.uniform1i(shaderProgram.samplerUniform, 0);
+
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cylinderIndexPositionBuffer);
+            gl.drawElements(gl.TRIANGLES, cylinderIndexPositionBuffer.numberOfItems, gl.UNSIGNED_SHORT, 0);
         }
 
         function draw() {
             gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-            mat4.perspective(60, gl.viewportWidth / gl.viewportHeight,
-                0.1, 100.0, projectionMatrix);
+            mat4.perspective(60, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, projectionMatrix);
             mat4.identity(modelViewMatrix);
             mat4.lookAt([0, 5, -10], [0, 0, 0], [0, 1, 0], modelViewMatrix);
             uploadModelViewMatrixToShader();
             uploadProjectionMatrixToShader();
-            drawEarth(0.0, 0.0, 1.0, 1.0);
-            // drawCube(255.0, 215.0, 0.0, 1)
+            drawEarth();
+            drawCube();
         }
 
         function resizeCanvas() {
@@ -297,19 +291,40 @@
             draw();
         }
 
+        function handleTextureLoaded(image, texture) {
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+            gl.generateMipmap(gl.TEXTURE_2D);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+        }
+
+        function initTextures() {
+            earthTexture = gl.createTexture();
+            var earthImage = new Image();
+            earthImage.onload = function() {
+                handleTextureLoaded(earthImage, earthTexture);
+            }
+            earthImage.src = "earth.jpg";
+        }
+
         function startup() {
             canvas = document.getElementById("myGLCanvas");
             gl = WebGLDebugUtils.makeDebugContext(createGLContext(canvas));
             setupShaders();
             setupBuffers();
+            initTextures();
             gl.clearColor(0.0, 0.0, 0.0, 1.0);
             gl.enable(gl.DEPTH_TEST);
+            
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
+            
         }
     </script>
 </head>
-<body onload="startup();">
-    <canvas id="myGLCanvas"></canvas>
+<body onload="startup()">
+    <canvas id="myGLCanvas" width="800" height="600"></canvas>
 </body>
 </html>
