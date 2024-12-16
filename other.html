@@ -53,7 +53,7 @@
         var elapsedTime = 0;
         var lastTime = 0;
 
-        var satelliteOrbitRadius; // Distance from Earth's center
+        var satelliteOrbitRadius = 50; // Distance from Earth's center
         var satelliteOrbitSpeed = 0.001; // Speed of orbit (adjust as needed)
         var satelliteOrbitAngle = 0; // Current angle in radians
 
@@ -130,6 +130,8 @@
             modelViewMatrixStack = [];
             gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
         }
+        
+
         function pushModelViewMatrix() {
             var copyToPush = mat4.create(modelViewMatrix);
             modelViewMatrixStack.push(copyToPush);
@@ -388,7 +390,6 @@
             dishIndexPositionBuffer.numberOfItems = dishIndices.length;
         }
 
-
         function setupBuffers() {
             setupSphereBuffers(10);
             setupCubeBuffers();
@@ -542,7 +543,7 @@
             gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-            mat4.perspective(60, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, projectionMatrix);
+            mat4.perspective(60, gl.viewportWidth / gl.viewportHeight, 0.1, 500.0, projectionMatrix);
 
             mat4.identity(modelViewMatrix);
             mat4.lookAt([0, 5, -20], [0, 0, 0], [0, 1, 0], modelViewMatrix);
@@ -553,7 +554,23 @@
             drawEarth();
 
 
-            drawSatellite(50);
+            drawSatellite(satelliteOrbitRadius);
+        }
+
+        function handleUserControls() {
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'ArrowRight') {
+                    satelliteOrbitRadius += 1;
+                    console.log('Right arrow pressed');
+                } else if (event.key === 'ArrowLeft') {
+                    if (satelliteOrbitRadius > 40) {
+                        satelliteOrbitRadius -= 1;
+                        console.log('Left arrow pressed');
+                    } else {
+                        console.log('Satellite is too close to Earth');
+                    }
+                }
+            });
         }
 
         function animate() {
@@ -577,6 +594,7 @@
             gl = createGLContext(canvas);
             setupShaders();
             setupBuffers();
+            handleUserControls();
             gl.clearColor(0.0, 0.0, 0.0, 1.0);
             gl.enable(gl.DEPTH_TEST);
             tick(); // Start animation loop
