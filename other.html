@@ -53,7 +53,7 @@
         var elapsedTime = 0;
         var lastTime = 0;
 
-        var satelliteOrbitRadius = 15; // Distance from Earth's center
+        var satelliteOrbitRadius; // Distance from Earth's center
         var satelliteOrbitSpeed = 0.001; // Speed of orbit (adjust as needed)
         var satelliteOrbitAngle = 0; // Current angle in radians
 
@@ -147,10 +147,9 @@
             gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexPositionBuffer);
             var sphereVertexPosition = [];
             var r = radius;
-            var m = 15; // Number of latitudinal segments
-            var n = 15; // Number of longitudinal segments
+            var m = 15;
+            var n = 15;
 
-            // Calculate the vertex coordinates
             for (var i = 0; i <= m; i++) {
                 for (var j = 0; j <= n; j++) {
                     // Calculate x, y, and z
@@ -194,9 +193,7 @@
                     var v3 = v1 + 1;
                     var v4 = v2 + 1;
 
-                    // Triangle 1
                     sphereIndexPosition.push(v1, v2, v3);
-                    // Triangle 2
                     sphereIndexPosition.push(v3, v2, v4);
                 }
             }
@@ -467,13 +464,11 @@
         }
 
 
-        function drawSatellite() {
-
+        function drawSatellite(orbitRadius) {
+            satelliteOrbitRadius = orbitRadius; // Distance from Earth's center
             
             pushModelViewMatrix();
             
-
-
             const satelliteX = satelliteOrbitRadius * Math.cos(satelliteOrbitAngle);
             const satelliteZ = satelliteOrbitRadius * Math.sin(satelliteOrbitAngle);
 
@@ -558,7 +553,7 @@
             drawEarth();
 
 
-            drawSatellite();
+            drawSatellite(50);
         }
 
         function animate() {
