@@ -20,22 +20,30 @@
     <script src="glMatrix.js"></script>
     <script src="webgl-debug.js"></script>
     <script id="shader-vs" type="x-shader/x-vertex">
-    attribute vec3 aVertexPosition;
-    attribute vec4 aVertexColor;
-    uniform mat4 uMVMatrix;
-    uniform mat4 uPMatrix;
-    varying vec4 vColor;
-    void main() {
+        attribute vec3 aVertexPosition;
+attribute vec2 aTextureCoord; // Add texture coordinates
+
+uniform mat4 uMVMatrix;
+uniform mat4 uPMatrix;
+
+varying vec2 vTextureCoord;
+
+void main() {
     gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
-    vColor = aVertexColor;
-    }
+    vTextureCoord = aTextureCoord; // Pass texture coordinates to fragment shader
+}
+
 </script>
     <script id="shader-fs" type="x-shader/x-fragment">
-    precision mediump float;
-    varying vec4 vColor;
-    void main() {
-    gl_FragColor = vColor;
-    }
+        precision mediump float;
+
+varying vec2 vTextureCoord; // Interpolated texture coordinates from vertex shader
+uniform sampler2D uSampler; // Texture sampler
+
+void main() {
+    gl_FragColor = texture2D(uSampler, vTextureCoord); // Sample texture
+}
+
 </script>
     <script type="text/javascript">
 
@@ -132,13 +140,17 @@
                 gl.getUniformLocation(shaderProgram, "uMVMatrix");
             shaderProgram.uniformProjMatrix =
                 gl.getUniformLocation(shaderProgram, "uPMatrix");
+            shaderProgram.textureCoordAttribute = gl.getAttribLocation(shaderProgram, "aTextureCoord");
+            gl.enableVertexAttribArray(shaderProgram.textureCoordAttribute);
+
+            shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler");
             // Initialise the matrices
             modelViewMatrix = mat4.create();
             projectionMatrix = mat4.create();
             modelViewMatrixStack = [];
             gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
         }
-        
+
 
         function pushModelViewMatrix() {
             var copyToPush = mat4.create(modelViewMatrix);
@@ -320,40 +332,86 @@
             panelVertexPositionBuffer = gl.createBuffer();
             gl.bindBuffer(gl.ARRAY_BUFFER, panelVertexPositionBuffer);
 
+            const width = 2.0;   // Half the width
+            const height = 8.0;  // Half the height
+            const depth = 0.2;   // Thickness
 
+            // Define vertices for a rectangular prism
             var panelVertexPosition = [
-                2, 8, 0.0,  // v0 (top-right)
-                -2, 8, 0.0, // v1 (top-left)
-                -2, -8, 0.0, // v2 (bottom-left)
-                2, -8, 0.0   // v3 (bottom-right)
+                // Front face (z = depth/2)
+                width, height, depth / 2,   // v0 (top-right front)
+                -width, height, depth / 2,  // v1 (top-left front)
+                -width, -height, depth / 2, // v2 (bottom-left front)
+                width, -height, depth / 2,  // v3 (bottom-right front)
+
+                // Back face (z = -depth/2)
+                width, height, -depth / 2,   // v4 (top-right back)
+                -width, height, -depth / 2,  // v5 (top-left back)
+                -width, -height, -depth / 2, // v6 (bottom-left back)
+                width, -height, -depth / 2   // v7 (bottom-right back)
             ];
 
             gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(panelVertexPosition), gl.STATIC_DRAW);
             panelVertexPositionBuffer.itemSize = 3;
-            panelVertexPositionBuffer.numberOfItems = 4;
+            panelVertexPositionBuffer.numberOfItems = 8;
 
+            // Define indices for the faces of the rectangular prism
             panelIndexBuffer = gl.createBuffer();
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, panelIndexBuffer);
 
-            // Define indices for two triangles to form the rectangle
             const panelIndices = [
-                0, 1, 2, // Triangle 1
-                0, 2, 3  // Triangle 2
+                // Front face
+                0, 1, 2, 0, 2, 3,
+                // Back face
+                4, 6, 5, 4, 7, 6,
+                // Top face
+                0, 4, 5, 0, 5, 1,
+                // Bottom face
+                3, 2, 6, 3, 6, 7,
+                // Right face
+                0, 3, 7, 0, 7, 4,
+                // Left face
+                1, 5, 6, 1, 6, 2
             ];
 
             gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(panelIndices), gl.STATIC_DRAW);
             panelIndexBuffer.itemSize = 1;
-            panelIndexBuffer.numberOfItems = 6;
+            panelIndexBuffer.numberOfItems = 36;
+
+            // Texture coordinates (for front and back faces only)
+            panelTextureCoordBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, panelTextureCoordBuffer);
+
+            var panelTextureCoords = [
+                // Front face
+                1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0,
+                // Back face
+                1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0,
+                // Top face
+                1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0,
+                // Bottom face
+                1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0,
+                // Right face
+                1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0,
+                // Left face
+                1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0
+            ];
+
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(panelTextureCoords), gl.STATIC_DRAW);
+            panelTextureCoordBuffer.itemSize = 2;
+            panelTextureCoordBuffer.numberOfItems = 8;
         }
+
+
 
         function setupDishBuffers() {
             dishVertexPositionBuffer = gl.createBuffer();
             gl.bindBuffer(gl.ARRAY_BUFFER, dishVertexPositionBuffer);
 
-            var radius = 2;         // Dish radius
-            var numRings = 20;        // Number of concentric rings
-            var numSegments = 36;     // Number of segments per ring
-            var curvature = 0.5;      // Curvature factor
+            var radius = 2;
+            var numRings = 20;
+            var numSegments = 36;
+            var curvature = 0.5;
             var dishVertices = [];
             var angleStep = (2 * Math.PI) / numSegments;
 
@@ -417,12 +475,64 @@
         function uploadProjectionMatrixToShader() {
             gl.uniformMatrix4fv(shaderProgram.uniformProjMatrix, false, projectionMatrix);
         }
-        function drawSphere(r, g, b, a) {
-            gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
+
+        var solarPanelTexture;
+        var earthTexture;
+
+        function setupTextures() {
+            solarPanelTexture = gl.createTexture();
+            solarPanelImage = new Image();
+            solarPanelImage.onload = function () {
+                gl.bindTexture(gl.TEXTURE_2D, solarPanelTexture);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, solarPanelImage);
+
+                // Texture parameters
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+                gl.bindTexture(gl.TEXTURE_2D, null);
+
+                // Debug Check: Verify texture
+                console.log("solarPanelTexture:", solarPanelTexture);
+                if (!solarPanelTexture) {
+                    console.error("Texture not loaded properly.");
+                }
+            };
+            solarPanelImage.src = "solarPanel.jpg";
+
+            earthTexture = gl.createTexture();
+            earthTexture.image = new Image();
+            earthTexture.image.onload = function () {
+                handleTextureLoaded(earthTexture);
+            }
+            earthTexture.image.src = "earth.jpg";
+            console.log('earth texture loaded');
+        }
+
+        function handleTextureLoaded(texture) {
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+            gl.generateMipmap(gl.TEXTURE_2D);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+        }
+
+        function drawSphere() {
             gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexPositionBuffer);
             gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
-                sphereVertexPositionBuffer.itemSize,
-                gl.FLOAT, false, 0, 0);
+                sphereVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, sphereTextureCoordBuffer);
+            gl.vertexAttribPointer(shaderProgram.textureCoordAttribute,
+                sphereTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, earthTexture);
+            gl.uniform1i(shaderProgram.samplerUniform, 0);
+
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphereIndexPositionBuffer);
             gl.drawElements(gl.TRIANGLES, sphereIndexPositionBuffer.numberOfItems,
                 gl.UNSIGNED_SHORT, 0);
@@ -451,13 +561,29 @@
                 gl.UNSIGNED_SHORT, 0);
         }
 
-        function drawPanel(r, g, b, a) {
-            gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
+        function drawPanel() {
             gl.bindBuffer(gl.ARRAY_BUFFER, panelVertexPositionBuffer);
-            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, panelVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+            gl.vertexAttribPointer(
+                shaderProgram.vertexPositionAttribute,
+                panelVertexPositionBuffer.itemSize,
+                gl.FLOAT, false, 0, 0
+            );
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, panelTextureCoordBuffer);
+            gl.vertexAttribPointer(
+                shaderProgram.textureCoordAttribute,
+                panelTextureCoordBuffer.itemSize,
+                gl.FLOAT, false, 0, 0
+            );
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, solarPanelTexture);
+            gl.uniform1i(shaderProgram.samplerUniform, 0);
+
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, panelIndexBuffer);
             gl.drawElements(gl.TRIANGLES, panelIndexBuffer.numberOfItems, gl.UNSIGNED_SHORT, 0);
         }
+
 
         function drawDish(r, g, b, a) {
             gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
@@ -472,14 +598,14 @@
 
         function drawSatellite(orbitRadius) {
             satelliteOrbitRadius = orbitRadius; // Distance from Earth's center
-            
+
             pushModelViewMatrix();
-            
+
             const satelliteX = satelliteOrbitRadius * Math.cos(satelliteOrbitAngle);
             const satelliteZ = satelliteOrbitRadius * Math.sin(satelliteOrbitAngle);
 
             mat4.translate(modelViewMatrix, [satelliteX, 0, satelliteZ]);
-            
+
             mat4.rotateY(modelViewMatrix, -satelliteOrbitAngle);
 
             uploadModelViewMatrixToShader();
@@ -497,7 +623,7 @@
             mat4.translate(modelViewMatrix, [0, -8.8, 0]); // Move to cylinder's end
             mat4.rotateY(modelViewMatrix, Math.PI / 2);
             uploadModelViewMatrixToShader();
-            drawPanel(1.0, 0.0, 0.0, 1.0);
+            drawPanel();
 
             popModelViewMatrix();
             popModelViewMatrix();
@@ -513,7 +639,7 @@
             mat4.translate(modelViewMatrix, [0, 8.8, 0]); // Move to cylinder's end
             mat4.rotateY(modelViewMatrix, Math.PI / 2);
             uploadModelViewMatrixToShader();
-            drawPanel(0.0, 1.0, 0.0, 1.0);
+            drawPanel();
 
             popModelViewMatrix();
             popModelViewMatrix();
@@ -540,29 +666,24 @@
             pushModelViewMatrix();
             mat4.rotateY(modelViewMatrix, angle);
             uploadModelViewMatrixToShader();
-            drawSphere(0.0, 0.0, 1.0, 1.0);
+            drawSphere();
             popModelViewMatrix();
         }
 
         function drawScene(zoomValue, rotateX, rotateY, moveX, moveY) {
             gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
             mat4.perspective(60, gl.viewportWidth / gl.viewportHeight, 0.1, 500.0, projectionMatrix);
-
             mat4.identity(modelViewMatrix);
             mat4.lookAt([rotateX, rotateY, zoomValue], [moveX, moveY, 0], [0, 1, 0], modelViewMatrix);
-
             uploadProjectionMatrixToShader();
             uploadModelViewMatrixToShader();
-
             drawEarth();
-
             drawSatellite(satelliteOrbitRadius);
         }
 
         function handleUserControls() {
-            document.addEventListener('keydown', function(event) {
+            document.addEventListener('keydown', function (event) {
                 if (event.key === 'ArrowRight') {
                     satelliteOrbitRadius += 1;
                     console.log('moving further from earth');
@@ -576,7 +697,7 @@
                 }
             });
 
-            document.addEventListener('keydown', function(event) {
+            document.addEventListener('keydown', function (event) {
                 if (event.key === 'ArrowUp') {
                     satelliteOrbitSpeed += 0.001;
                     console.log('speedup!!!!!!!!!1');
@@ -590,7 +711,7 @@
                 }
             });
 
-            document.addEventListener('wheel', function(event) {
+            document.addEventListener('wheel', function (event) {
                 if (event.deltaY > 0) {
                     zoomValue += 5;
                     console.log('user holding down shift and scrolling up');
@@ -599,9 +720,9 @@
                     console.log('user holding down shift and scrolling down');
                 }
             });
-            
 
-            document.addEventListener('mousedown', function(event) {
+
+            document.addEventListener('mousedown', function (event) {
                 if (event.shiftKey) {
                     let startX = event.clientX;
                     let lastX = startX;
@@ -638,19 +759,19 @@
                     let lastY = startY;
                     let startX = event.clientX;
                     let lastX = startX;
-                    
+
                     document.addEventListener('mousemove', onMouseMove);
 
                     function onMouseMove(event) {
                         if (event.clientY < lastY) {
-                            if (rotateY < 200){
+                            if (rotateY < 200) {
                                 rotateY += 5;
-                                console.log('user JUST dragging up', rotateY);  
+                                console.log('user JUST dragging up', rotateY);
                             } else {
                                 console.log('TOO HIGH BRUH!!!!!!!!!!!!!!!!!!!');
                             }
                         } else if (event.clientY > lastY) {
-                            if (rotateY > -200){
+                            if (rotateY > -200) {
                                 rotateY -= 5;
                                 console.log('user JUST dragging down', rotateY);
                             } else {
@@ -660,14 +781,14 @@
                         lastY = event.clientY;
 
                         if (event.clientX < lastX) {
-                            if (rotateX > -200){
+                            if (rotateX > -200) {
                                 rotateX -= 5;
-                                console.log('user JUST dragging left', rotateX);  
+                                console.log('user JUST dragging left', rotateX);
                             } else {
                                 console.log('TOO LEFT BRUH!!!!!!!!!!!!!!!!!!!');
                             }
                         } else if (event.clientX > lastX) {
-                            if (rotateX < 200){
+                            if (rotateX < 200) {
                                 rotateX += 5;
                                 console.log('user JUST dragging right', rotateX);
                             } else {
@@ -675,14 +796,12 @@
                             }
                         }
                         lastX = event.clientX;
-                    } 
+                    }
                 }
-                document.addEventListener('mouseup', function() {
-                        document.removeEventListener('mousemove', onMouseMove);
-                    }, { once: true });
+                document.addEventListener('mouseup', function () {
+                    document.removeEventListener('mousemove', onMouseMove);
+                }, { once: true });
             });
-
-            
         }
 
         function animate() {
@@ -698,7 +817,7 @@
         function tick() {
             requestAnimationFrame(tick);
             drawScene(zoomValue, rotateX, rotateY, moveX, moveY);
-            //animate();
+            animate();
         }
 
         function startup() {
@@ -706,6 +825,7 @@
             gl = createGLContext(canvas);
             setupShaders();
             setupBuffers();
+            setupTextures();
             handleUserControls();
             gl.clearColor(0.0, 0.0, 0.0, 1.0);
             gl.enable(gl.DEPTH_TEST);
