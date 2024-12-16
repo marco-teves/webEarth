@@ -1,22 +1,25 @@
 <!DOCTYPE HTML>
 <html lang="en">
+
 <head>
     <style>
-        body, html {
+        body,
+        html {
             margin: 0;
             padding: 0;
             overflow: hidden;
             height: 100%;
         }
+
         canvas {
             display: block;
         }
     </style>
-<title> Sphere </title>
-<meta charset="utf-8">
-<script src="glMatrix.js"></script>
-<script src="webgl-debug.js"></script>
-<script id="shader-vs" type=    "x-shader/x-vertex">
+    <title> Super Earth </title>
+    <meta charset="utf-8">
+    <script src="glMatrix.js"></script>
+    <script src="webgl-debug.js"></script>
+    <script id="shader-vs" type="x-shader/x-vertex">
     attribute vec3 aVertexPosition;
     attribute vec4 aVertexColor;
     uniform mat4 uMVMatrix;
@@ -27,535 +30,568 @@
     vColor = aVertexColor;
     }
 </script>
-<script id="shader-fs" type="x-shader/x-fragment">
+    <script id="shader-fs" type="x-shader/x-fragment">
     precision mediump float;
     varying vec4 vColor;
     void main() {
     gl_FragColor = vColor;
     }
 </script>
-<script type="text/javascript">
-    
-var gl;
-var canvas;
-var shaderProgram;
-var sphereVertexPositionBuffer;
-var sphereIndexPositionBuffer;
-var modelViewMatrix;
-var projectionMatrix;
-var modelViewMatrixStack;
-var satelliteAngle = 0; 
-var panelVertexPositionBuffer;
-var panelIndexBuffer;
-var elapsedTime = 0;
-var lastTime = 0;
+    <script type="text/javascript">
 
-function createGLContext(canvas) {
-    var names = ["webgl", "experimental-webgl"];
-    var context = null;
-    for (var i=0; i < names.length; i++) {
-        try {
-        context = canvas.getContext(names[i]);
-    } catch(e) {}
-    if (context) {
-        break;
-    }
-    }
-    if (context) {
-        context.viewportWidth = canvas.width;
-        context.viewportHeight = canvas.height;
-    } else {
-        alert("Failed to create WebGL context!");
-    }
-    return context;
-}
-function loadShaderFromDOM(id) {
-    var shaderScript = document.getElementById(id);
-    if (!shaderScript) {
-        return null;
-    }
-    var shaderSource = "";
-    var currentChild = shaderScript.firstChild;
-    while (currentChild) {
-        if (currentChild.nodeType == 3) { // 3 corresponds to TEXT_NODE
-            shaderSource += currentChild.textContent;
+        var gl;
+        var canvas;
+        var shaderProgram;
+        var sphereVertexPositionBuffer;
+        var sphereIndexPositionBuffer;
+        var modelViewMatrix;
+        var projectionMatrix;
+        var modelViewMatrixStack;
+        var satelliteAngle = 0;
+        var panelVertexPositionBuffer;
+        var panelIndexBuffer;
+        var elapsedTime = 0;
+        var lastTime = 0;
+
+        var satelliteOrbitRadius = 15; // Distance from Earth's center
+        var satelliteOrbitSpeed = 0.001; // Speed of orbit (adjust as needed)
+        var satelliteOrbitAngle = 0; // Current angle in radians
+
+
+        function createGLContext(canvas) {
+            var names = ["webgl", "experimental-webgl"];
+            var context = null;
+            for (var i = 0; i < names.length; i++) {
+                try {
+                    context = canvas.getContext(names[i]);
+                } catch (e) { }
+                if (context) {
+                    break;
+                }
+            }
+            if (context) {
+                context.viewportWidth = canvas.width;
+                context.viewportHeight = canvas.height;
+            } else {
+                alert("Failed to create WebGL context!");
+            }
+            return context;
         }
-        currentChild = currentChild.nextSibling;
-    }
-    var shader;
-    if (shaderScript.type == "x-shader/x-fragment") {
-        shader = gl.createShader(gl.FRAGMENT_SHADER);
-    } else if (shaderScript.type == "x-shader/x-vertex") {
-        shader = gl.createShader(gl.VERTEX_SHADER);
-    } else {
-        return null;
-    }
-    gl.shaderSource(shader, shaderSource);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        alert(gl.getShaderInfoLog(shader));
-        return null;
-    }
-    return shader;
-}
-function setupShaders() {
-    var vertexShader = loadShaderFromDOM("shader-vs");
-    var fragmentShader = loadShaderFromDOM("shader-fs");
-    shaderProgram = gl.createProgram();
-    gl.attachShader(shaderProgram, vertexShader);
-    gl.attachShader(shaderProgram, fragmentShader);
-    gl.linkProgram(shaderProgram);
-    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
-        alert("Failed to setup shaders");
-    }
-    gl.useProgram(shaderProgram);
-    shaderProgram.vertexPositionAttribute =
-    gl.getAttribLocation(shaderProgram, "aVertexPosition");
-    shaderProgram.vertexColorAttribute = gl.getAttribLocation(shaderProgram, "aVertexColor");
-    shaderProgram.uniformMVMatrix =
-    gl.getUniformLocation(shaderProgram, "uMVMatrix");
-    shaderProgram.uniformProjMatrix =
-    gl.getUniformLocation(shaderProgram, "uPMatrix");
-    // Initialise the matrices
-    modelViewMatrix = mat4.create();
-    projectionMatrix = mat4.create();
-    modelViewMatrixStack = [];
-    gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
-}
-function pushModelViewMatrix() {
-    var copyToPush = mat4.create(modelViewMatrix);
-    modelViewMatrixStack.push(copyToPush);
-}
-function popModelViewMatrix() {
-    if (modelViewMatrixStack.length == 0) {
-        throw "Error popModelViewMatrix() - Stack was empty ";
-    }
-    modelViewMatrix = modelViewMatrixStack.pop();
-}
-function setupSphereBuffers(radius){
-    //using gl.Triangles (drawElements) to draw a sphere
-    sphereVertexPositionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexPositionBuffer);
-    var sphereVertexPosition=[];
-    var r = radius;
-    //choosing an arbitrary value for m and n
-    var m=15;
-    var n=15;
-    // calculate the vertex coordinates
-    for (var i=0; i <= m; i++) {
-        for (var j=0; j <=n; j++){
-            //calculate x, y and z here
-            //x=r*(Math.sin(theta))*(Math.cos(phi));
-            x=r*Math.sin(i*Math.PI/m) * Math.cos(2*j*Math.PI/n)
-            //y=(r*(Math.cos(theta)));
-            y=r*Math.cos(i*Math.PI/m);
-            //z=(r*(Math.sin(theta))*(Math.sin(phi)));
-            z=r*Math.sin(i*Math.PI/m)*Math.sin(2*j*Math.PI/n);
-            sphereVertexPosition.push(x);
-            sphereVertexPosition.push(y);
-            sphereVertexPosition.push(z);
+        function loadShaderFromDOM(id) {
+            var shaderScript = document.getElementById(id);
+            if (!shaderScript) {
+                return null;
+            }
+            var shaderSource = "";
+            var currentChild = shaderScript.firstChild;
+            while (currentChild) {
+                if (currentChild.nodeType == 3) { // 3 corresponds to TEXT_NODE
+                    shaderSource += currentChild.textContent;
+                }
+                currentChild = currentChild.nextSibling;
+            }
+            var shader;
+            if (shaderScript.type == "x-shader/x-fragment") {
+                shader = gl.createShader(gl.FRAGMENT_SHADER);
+            } else if (shaderScript.type == "x-shader/x-vertex") {
+                shader = gl.createShader(gl.VERTEX_SHADER);
+            } else {
+                return null;
+            }
+            gl.shaderSource(shader, shaderSource);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                alert(gl.getShaderInfoLog(shader));
+                return null;
+            }
+            return shader;
         }
-    }
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereVertexPosition),
-    gl.STATIC_DRAW);
-    sphereVertexPositionBuffer.itemSize = 3;
-    sphereVertexPositionBuffer.numberOfItems = (m+1)*(n+1);
-    sphereIndexPositionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphereIndexPositionBuffer);
-
-    var sphereIndexPosition=[];
-    for (var i=0; i < m; i ++){
-        for (var j=0; j < n; j++){
-            var v1 = i*(n+1) + j;
-            var v2 = v1+n+1;
-            var v3 = v1+1;
-            var v4 = v2 + 1;
-            //triangle 1
-            sphereIndexPosition.push(v1);
-            sphereIndexPosition.push(v2);
-            sphereIndexPosition.push(v3);
-            //triangle 2
-            sphereIndexPosition.push(v3);
-            sphereIndexPosition.push(v2);
-            sphereIndexPosition.push(v4);
+        function setupShaders() {
+            var vertexShader = loadShaderFromDOM("shader-vs");
+            var fragmentShader = loadShaderFromDOM("shader-fs");
+            shaderProgram = gl.createProgram();
+            gl.attachShader(shaderProgram, vertexShader);
+            gl.attachShader(shaderProgram, fragmentShader);
+            gl.linkProgram(shaderProgram);
+            if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+                alert("Failed to setup shaders");
+            }
+            gl.useProgram(shaderProgram);
+            shaderProgram.vertexPositionAttribute =
+                gl.getAttribLocation(shaderProgram, "aVertexPosition");
+            shaderProgram.vertexColorAttribute = gl.getAttribLocation(shaderProgram, "aVertexColor");
+            shaderProgram.uniformMVMatrix =
+                gl.getUniformLocation(shaderProgram, "uMVMatrix");
+            shaderProgram.uniformProjMatrix =
+                gl.getUniformLocation(shaderProgram, "uPMatrix");
+            // Initialise the matrices
+            modelViewMatrix = mat4.create();
+            projectionMatrix = mat4.create();
+            modelViewMatrixStack = [];
+            gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
         }
-    }
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new
-    Uint16Array(sphereIndexPosition),
-    gl.STATIC_DRAW);
-    sphereIndexPositionBuffer.itemSize = 3;
-    sphereIndexPositionBuffer.numberOfItems = m*n*2*3;
-
-    var sphereNormalData = [];
-    for (var i=0; i <=m; i++){
-        for (var j=0; j<=n; j++){
-            //nx=Math.sin(theta)*Math.cos(theta);
-            nx=(Math.sin((i*Math.PI)/m))*(Math.cos((2*j*Math.PI)/n));
-            //ny=Math.cos(theta);
-            ny=(Math.cos((i*Math.PI)/m));
-            //nz=Math.sin(theta)*Math.sin(phi);
-            nz=(Math.sin((i*Math.PI)/m))*(Math.sin((2*j*Math.PI)/n));
-            sphereNormalData.push(nx);
-            sphereNormalData.push(ny);
-            sphereNormalData.push(nz);
+        function pushModelViewMatrix() {
+            var copyToPush = mat4.create(modelViewMatrix);
+            modelViewMatrixStack.push(copyToPush);
         }
-    }
-    //console.log(sphereNormalData);
-}
-function setupCubeBuffers() {
-    cubeVertexPositionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
-    var cubeVertexPosition = [
-    3.0, 3.0, 3.0, //v0
-    -3.0, 3.0, 3.0, //v3
-    -3.0, -3.0, 3.0, //v2
-    3.0, -3.0, 3.0, //v3
-    3.0, 3.0, -3.0, //v4
-    -3.0, 3.0, -3.0, //v5
-    -3.0, -3.0, -3.0, //v6
-    3.0, -3.0, -3.0, //v7
-    ];
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertexPosition),
-    gl.STATIC_DRAW);
-    cubeVertexPositionBuffer.itemSize = 3;
-    cubeVertexPositionBuffer.numberOfItems = 8;
-    cubeVertexIndexBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
-
-    //For simplicity, each face will be drawn as gl_TRIANGLES, therefore
-    //the indices for each triangle are specified.
-    var cubeVertexIndices = [
-    0, 1, 2, 0, 2, 3, // Front face
-    4, 6, 5, 4, 7, 6, // Back face
-    1, 5, 6, 1, 6, 2, //left
-    0, 3, 7, 0, 7, 4, //right
-    0, 5, 1, 0, 4, 5, //top
-    3, 2, 6, 3, 6, 7 //bottom
-    ];
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cubeVertexIndices),
-    gl.STATIC_DRAW);
-    cubeVertexIndexBuffer.itemSize = 1;
-    cubeVertexIndexBuffer.numberOfItems = 36;
-}
-
-function setupCylinderBuffers() {
-    cylinderVertexPositionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderVertexPositionBuffer);
-    
-    var radius = 0.1;
-    var height = 1.5;
-    var numSegments = 36;
-    var cylinderVertices = [];
-    var angleStep = (2 * Math.PI) / numSegments;
-
-    // Generate the cylinder vertices
-    for (let i = 0; i <= numSegments; i++) {
-        let angle = i * angleStep;
-        let x = Math.cos(angle) * radius;
-        let z = Math.sin(angle) * radius;
-
-        // Bottom circle
-        cylinderVertices.push(x, -height / 2, z);
-
-        // Top circle
-        cylinderVertices.push(x, height / 2, z);
-    }
-
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cylinderVertices), gl.STATIC_DRAW);
-    cylinderVertexPositionBuffer.itemSize = 3;
-    cylinderVertexPositionBuffer.numberOfItems = (numSegments + 1) * 2;
-
-    // Generate indices
-    cylinderIndexPositionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cylinderIndexPositionBuffer);
-    var cylinderIndices = [];
-
-    for (let i = 0; i < numSegments; i++) {
-        // Side triangles
-        let p1 = i * 2;
-        let p2 = p1 + 1;
-        let p3 = (i + 1) * 2;
-        let p4 = p3 + 1;
-
-        cylinderIndices.push(p1, p2, p3);
-        cylinderIndices.push(p3, p2, p4);
-    }
-
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cylinderIndices), gl.STATIC_DRAW);
-    cylinderIndexPositionBuffer.itemSize = 3;
-    cylinderIndexPositionBuffer.numberOfItems = cylinderIndices.length;
-}
-
-function setupPanelBuffers() {
-    panelVertexPositionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, panelVertexPositionBuffer);
-
-    
-    var panelVertexPosition = [
-        2, 8, 0.0,  // v0 (top-right)
-        -2, 8, 0.0, // v1 (top-left)
-        -2, -8, 0.0, // v2 (bottom-left)
-        2, -8, 0.0   // v3 (bottom-right)
-    ];
-
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(panelVertexPosition), gl.STATIC_DRAW);
-    panelVertexPositionBuffer.itemSize = 3;
-    panelVertexPositionBuffer.numberOfItems = 4;
-
-    panelIndexBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, panelIndexBuffer);
-
-    // Define indices for two triangles to form the rectangle
-    const panelIndices = [
-        0, 1, 2, // Triangle 1
-        0, 2, 3  // Triangle 2
-    ];
-
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(panelIndices), gl.STATIC_DRAW);
-    panelIndexBuffer.itemSize = 1;
-    panelIndexBuffer.numberOfItems = 6;
-}
-
-function setupDishBuffers() {
-    dishVertexPositionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, dishVertexPositionBuffer);
-
-    var radius = 2;         // Dish radius
-    var numRings = 20;        // Number of concentric rings
-    var numSegments = 36;     // Number of segments per ring
-    var curvature = 0.5;      // Curvature factor
-    var dishVertices = [];
-    var angleStep = (2 * Math.PI) / numSegments;
-
-    // Generate dish vertices
-    for (let ring = 0; ring <= numRings; ring++) {
-        let r = (ring / numRings) * radius; // Radius at this ring
-        let z = -curvature * (1 - (ring / numRings)) ** 2; // Curved depth on z-axis
-
-        for (let segment = 0; segment <= numSegments; segment++) {
-            let angle = segment * angleStep;
-            let x = r * Math.cos(angle); // x position
-            let y = r * Math.sin(angle); // y position
-
-            dishVertices.push(x, y, z);
+        function popModelViewMatrix() {
+            if (modelViewMatrixStack.length == 0) {
+                throw "Error popModelViewMatrix() - Stack was empty ";
+            }
+            modelViewMatrix = modelViewMatrixStack.pop();
         }
-    }
 
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(dishVertices), gl.STATIC_DRAW);
-    dishVertexPositionBuffer.itemSize = 3;
-    dishVertexPositionBuffer.numberOfItems = (numRings + 1) * (numSegments + 1);
+        function setupSphereBuffers(radius) {
+            // Using gl.Triangles (drawElements) to draw a sphere
+            sphereVertexPositionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexPositionBuffer);
+            var sphereVertexPosition = [];
+            var r = radius;
+            var m = 15; // Number of latitudinal segments
+            var n = 15; // Number of longitudinal segments
 
-    // Generate indices
-    dishIndexPositionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, dishIndexPositionBuffer);
+            // Calculate the vertex coordinates
+            for (var i = 0; i <= m; i++) {
+                for (var j = 0; j <= n; j++) {
+                    // Calculate x, y, and z
+                    var theta = (i * Math.PI) / m;         // Latitude angle
+                    var phi = (2 * j * Math.PI) / n;      // Longitude angle
+                    var x = r * Math.sin(theta) * Math.cos(phi);
+                    var y = r * Math.cos(theta);
+                    var z = r * Math.sin(theta) * Math.sin(phi);
+                    sphereVertexPosition.push(x, y, z);
+                }
+            }
 
-    var dishIndices = [];
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereVertexPosition), gl.STATIC_DRAW);
+            sphereVertexPositionBuffer.itemSize = 3;
+            sphereVertexPositionBuffer.numberOfItems = (m + 1) * (n + 1);
 
-    for (let ring = 0; ring < numRings; ring++) {
-        for (let segment = 0; segment < numSegments; segment++) {
-            let p1 = ring * (numSegments + 1) + segment;
-            let p2 = p1 + numSegments + 1;
-            let p3 = p1 + 1;
-            let p4 = p2 + 1;
+            // Add texture coordinates
+            sphereTextureCoordBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, sphereTextureCoordBuffer);
+            var sphereTextureCoords = [];
+            for (var i = 0; i <= m; i++) {
+                for (var j = 0; j <= n; j++) {
+                    var u = j / n; // Horizontal texture coordinate
+                    var v = i / m; // Vertical texture coordinate
+                    sphereTextureCoords.push(u, v);
+                }
+            }
 
-            dishIndices.push(p1, p2, p3); // Triangle 1
-            dishIndices.push(p3, p2, p4); // Triangle 2
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereTextureCoords), gl.STATIC_DRAW);
+            sphereTextureCoordBuffer.itemSize = 2;
+            sphereTextureCoordBuffer.numberOfItems = (m + 1) * (n + 1);
+
+            // Set up indices for drawing elements
+            sphereIndexPositionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphereIndexPositionBuffer);
+            var sphereIndexPosition = [];
+            for (var i = 0; i < m; i++) {
+                for (var j = 0; j < n; j++) {
+                    var v1 = i * (n + 1) + j;
+                    var v2 = v1 + n + 1;
+                    var v3 = v1 + 1;
+                    var v4 = v2 + 1;
+
+                    // Triangle 1
+                    sphereIndexPosition.push(v1, v2, v3);
+                    // Triangle 2
+                    sphereIndexPosition.push(v3, v2, v4);
+                }
+            }
+
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(sphereIndexPosition), gl.STATIC_DRAW);
+            sphereIndexPositionBuffer.itemSize = 3;
+            sphereIndexPositionBuffer.numberOfItems = m * n * 2 * 3;
+
+            // Add normals for lighting calculations
+            var sphereNormalData = [];
+            for (var i = 0; i <= m; i++) {
+                for (var j = 0; j <= n; j++) {
+                    var theta = (i * Math.PI) / m;
+                    var phi = (2 * j * Math.PI) / n;
+                    var nx = Math.sin(theta) * Math.cos(phi);
+                    var ny = Math.cos(theta);
+                    var nz = Math.sin(theta) * Math.sin(phi);
+                    sphereNormalData.push(nx, ny, nz);
+                }
+            }
+
+            sphereNormalBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, sphereNormalBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereNormalData), gl.STATIC_DRAW);
+            sphereNormalBuffer.itemSize = 3;
+            sphereNormalBuffer.numberOfItems = (m + 1) * (n + 1);
         }
-    }
 
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(dishIndices), gl.STATIC_DRAW);
-    dishIndexPositionBuffer.itemSize = 1;
-    dishIndexPositionBuffer.numberOfItems = dishIndices.length;
-}
+        function setupCubeBuffers() {
+            cubeVertexPositionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
+            var cubeVertexPosition = [
+                3.0, 3.0, 3.0, //v0
+                -3.0, 3.0, 3.0, //v3
+                -3.0, -3.0, 3.0, //v2
+                3.0, -3.0, 3.0, //v3
+                3.0, 3.0, -3.0, //v4
+                -3.0, 3.0, -3.0, //v5
+                -3.0, -3.0, -3.0, //v6
+                3.0, -3.0, -3.0, //v7
+            ];
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertexPosition),
+                gl.STATIC_DRAW);
+            cubeVertexPositionBuffer.itemSize = 3;
+            cubeVertexPositionBuffer.numberOfItems = 8;
+            cubeVertexIndexBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
 
+            //For simplicity, each face will be drawn as gl_TRIANGLES, therefore
+            //the indices for each triangle are specified.
+            var cubeVertexIndices = [
+                0, 1, 2, 0, 2, 3, // Front face
+                4, 6, 5, 4, 7, 6, // Back face
+                1, 5, 6, 1, 6, 2, //left
+                0, 3, 7, 0, 7, 4, //right
+                0, 5, 1, 0, 4, 5, //top
+                3, 2, 6, 3, 6, 7 //bottom
+            ];
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cubeVertexIndices),
+                gl.STATIC_DRAW);
+            cubeVertexIndexBuffer.itemSize = 1;
+            cubeVertexIndexBuffer.numberOfItems = 36;
+        }
 
-function setupBuffers() {
-    setupSphereBuffers(10);
-    setupCubeBuffers();
+        function setupCylinderBuffers() {
+            cylinderVertexPositionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, cylinderVertexPositionBuffer);
 
-    
-    setupCylinderBuffers(0.1);
-    setupCylinderBuffers(0.2);
+            var radius = 0.1;
+            var height = 1.5;
+            var numSegments = 36;
+            var cylinderVertices = [];
+            var angleStep = (2 * Math.PI) / numSegments;
 
-    setupPanelBuffers();
+            // Generate the cylinder vertices
+            for (let i = 0; i <= numSegments; i++) {
+                let angle = i * angleStep;
+                let x = Math.cos(angle) * radius;
+                let z = Math.sin(angle) * radius;
 
-    setupDishBuffers();
-}
+                // Bottom circle
+                cylinderVertices.push(x, -height / 2, z);
 
-function uploadModelViewMatrixToShader() {
-    gl.uniformMatrix4fv(shaderProgram.uniformMVMatrix, false,
-    modelViewMatrix);
-}
-function uploadProjectionMatrixToShader() {
-    gl.uniformMatrix4fv(shaderProgram.uniformProjMatrix, false, projectionMatrix);
-}
-function drawSphere(r,g,b,a) {
-    gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
-    gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexPositionBuffer);
-    gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
-    sphereVertexPositionBuffer.itemSize,
-    gl.FLOAT, false, 0, 0);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphereIndexPositionBuffer);
-    gl.drawElements(gl.TRIANGLES, sphereIndexPositionBuffer.numberOfItems,
-    gl.UNSIGNED_SHORT, 0);
-}
+                // Top circle
+                cylinderVertices.push(x, height / 2, z);
+            }
 
-function drawCube(r,g,b,a) {
-    gl.disableVertexAttribArray(shaderProgram.vertexColorAttribute);
-    gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
-    gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
-    gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
-    cubeVertexPositionBuffer.itemSize,
-    gl.FLOAT, false, 0, 0);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
-    gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numberOfItems,
-    gl.UNSIGNED_SHORT, 0);
-}
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cylinderVertices), gl.STATIC_DRAW);
+            cylinderVertexPositionBuffer.itemSize = 3;
+            cylinderVertexPositionBuffer.numberOfItems = (numSegments + 1) * 2;
 
-function drawCylinder(r,g,b,a) {
-    gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
-    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderVertexPositionBuffer);
-    gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
-    cylinderVertexPositionBuffer.itemSize,
-    gl.FLOAT, false, 0, 0);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cylinderIndexPositionBuffer);
-    gl.drawElements(gl.TRIANGLES, cylinderIndexPositionBuffer.numberOfItems,
-    gl.UNSIGNED_SHORT, 0);
-}
+            // Generate indices
+            cylinderIndexPositionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cylinderIndexPositionBuffer);
+            var cylinderIndices = [];
 
+            for (let i = 0; i < numSegments; i++) {
+                // Side triangles
+                let p1 = i * 2;
+                let p2 = p1 + 1;
+                let p3 = (i + 1) * 2;
+                let p4 = p3 + 1;
 
-function drawPanel(r, g, b, a) {
-    gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
-    gl.bindBuffer(gl.ARRAY_BUFFER, panelVertexPositionBuffer);
-    gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, panelVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, panelIndexBuffer);
-    gl.drawElements(gl.TRIANGLES, panelIndexBuffer.numberOfItems, gl.UNSIGNED_SHORT, 0);
-}
+                cylinderIndices.push(p1, p2, p3);
+                cylinderIndices.push(p3, p2, p4);
+            }
 
-function drawDish(r, g, b, a) {
-    gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cylinderIndices), gl.STATIC_DRAW);
+            cylinderIndexPositionBuffer.itemSize = 3;
+            cylinderIndexPositionBuffer.numberOfItems = cylinderIndices.length;
+        }
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, dishVertexPositionBuffer);
-    gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, 
-        dishVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
-
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, dishIndexPositionBuffer);
-    gl.drawElements(gl.TRIANGLES, dishIndexPositionBuffer.numberOfItems, gl.UNSIGNED_SHORT, 0);
-}
-
-
-function drawSatellite() {
-    var angle = elapsedTime * 0.001;
-
-    pushModelViewMatrix();
-    mat4.rotateY(modelViewMatrix, angle); // Rotate around the Y-axis
-    uploadModelViewMatrixToShader();
-    drawCube(1.0, 1.0, 0.0, 1.0);
+        function setupPanelBuffers() {
+            panelVertexPositionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, panelVertexPositionBuffer);
 
 
-    pushModelViewMatrix();
-    mat4.translate(modelViewMatrix, [-4, 0, 0]); // Position left cylinder
-    mat4.rotateZ(modelViewMatrix, Math.PI / 2);    // Orient cylinder along x-axis
-    uploadModelViewMatrixToShader();
-    drawCylinder(0.0, 1.0, 0.0, 1.0); // Green cylinder
+            var panelVertexPosition = [
+                2, 8, 0.0,  // v0 (top-right)
+                -2, 8, 0.0, // v1 (top-left)
+                -2, -8, 0.0, // v2 (bottom-left)
+                2, -8, 0.0   // v3 (bottom-right)
+            ];
 
-    // Attach left panel
-    pushModelViewMatrix();
-    mat4.translate(modelViewMatrix, [0, 8.8, 0]); // Move to cylinder's end
-    mat4.rotateY(modelViewMatrix, Math.PI / 1.5);
-    uploadModelViewMatrixToShader();
-    drawPanel(1.0, 0.0, 0.0, 1.0); // Red panel
-    popModelViewMatrix();
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(panelVertexPosition), gl.STATIC_DRAW);
+            panelVertexPositionBuffer.itemSize = 3;
+            panelVertexPositionBuffer.numberOfItems = 4;
 
-    popModelViewMatrix();
+            panelIndexBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, panelIndexBuffer);
 
-    // Draw Right Cylinder
-    pushModelViewMatrix();
-    mat4.translate(modelViewMatrix, [4, 0, 0]); // Position right cylinder
-    mat4.rotateZ(modelViewMatrix, Math.PI / 2);   // Orient cylinder along x-axis
-    uploadModelViewMatrixToShader();
-    drawCylinder(0.0, 0.0, 1.0, 1.0); // Blue cylinder
+            // Define indices for two triangles to form the rectangle
+            const panelIndices = [
+                0, 1, 2, // Triangle 1
+                0, 2, 3  // Triangle 2
+            ];
 
-    // Attach right panel
-    pushModelViewMatrix();
-    mat4.translate(modelViewMatrix, [0, -8.8, 0]); // Move to cylinder's end
-    mat4.rotateY(modelViewMatrix, Math.PI / 1.5);  
-    uploadModelViewMatrixToShader();
-    drawPanel(0.0, 1.0, 0.0, 1.0); // Green panel
-    popModelViewMatrix();
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(panelIndices), gl.STATIC_DRAW);
+            panelIndexBuffer.itemSize = 1;
+            panelIndexBuffer.numberOfItems = 6;
+        }
 
-    popModelViewMatrix();
+        function setupDishBuffers() {
+            dishVertexPositionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, dishVertexPositionBuffer);
 
-    pushModelViewMatrix();
-    mat4.translate(modelViewMatrix, [0, 0, -3]); // Position right cylinder
-    mat4.rotateX(modelViewMatrix, Math.PI / 2);   // Orient cylinder along x-axis
-    uploadModelViewMatrixToShader();
-    drawCylinder(0.0, 1.0, 1.0, 1.0); // Blue cylinder
+            var radius = 2;         // Dish radius
+            var numRings = 20;        // Number of concentric rings
+            var numSegments = 36;     // Number of segments per ring
+            var curvature = 0.5;      // Curvature factor
+            var dishVertices = [];
+            var angleStep = (2 * Math.PI) / numSegments;
 
-    pushModelViewMatrix();
-    mat4.translate(modelViewMatrix, [0, -1.2, 0]); // Move dish to the front of the cube
-    mat4.rotateX(modelViewMatrix, Math.PI/2);
-    uploadModelViewMatrixToShader();
-    drawDish(1.0, 1.0, 1.0, 1.0);
+            // Generate dish vertices
+            for (let ring = 0; ring <= numRings; ring++) {
+                let r = (ring / numRings) * radius; // Radius at this ring
+                let z = -curvature * (1 - (ring / numRings)) ** 2; // Curved depth on z-axis
 
-    popModelViewMatrix();
-    popModelViewMatrix();
-    popModelViewMatrix();
-}
+                for (let segment = 0; segment <= numSegments; segment++) {
+                    let angle = segment * angleStep;
+                    let x = r * Math.cos(angle); // x position
+                    let y = r * Math.sin(angle); // y position
 
-function drawEarth() {
-    pushModelViewMatrix();
-    mat4.translate(modelViewMatrix, [0, 0, 0]);
-    uploadModelViewMatrixToShader();
-    drawSphere(0.0, 0.0, 1.0, 1.0);
-    popModelViewMatrix();
-}
+                    dishVertices.push(x, y, z);
+                }
+            }
 
-function drawScene() {
-    gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(dishVertices), gl.STATIC_DRAW);
+            dishVertexPositionBuffer.itemSize = 3;
+            dishVertexPositionBuffer.numberOfItems = (numRings + 1) * (numSegments + 1);
 
-    mat4.perspective(60, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, projectionMatrix);
+            // Generate indices
+            dishIndexPositionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, dishIndexPositionBuffer);
 
-    mat4.identity(modelViewMatrix);
-    mat4.lookAt([0, 5, -20], [0, 0, 0], [0, 1, 0], modelViewMatrix);
+            var dishIndices = [];
 
-    uploadProjectionMatrixToShader();
-    uploadModelViewMatrixToShader();
-    
+            for (let ring = 0; ring < numRings; ring++) {
+                for (let segment = 0; segment < numSegments; segment++) {
+                    let p1 = ring * (numSegments + 1) + segment;
+                    let p2 = p1 + numSegments + 1;
+                    let p3 = p1 + 1;
+                    let p4 = p2 + 1;
 
-    // Draw the Satellite
-    drawSatellite();
-}
+                    dishIndices.push(p1, p2, p3); // Triangle 1
+                    dishIndices.push(p3, p2, p4); // Triangle 2
+                }
+            }
 
-function animate() {
-    var timeNow = new Date().getTime();
-    if (lastTime != 0) {
-        var elapsed = timeNow - lastTime;
-        elapsedTime += elapsed;
-    }
-    lastTime = timeNow;
-}
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(dishIndices), gl.STATIC_DRAW);
+            dishIndexPositionBuffer.itemSize = 1;
+            dishIndexPositionBuffer.numberOfItems = dishIndices.length;
+        }
 
-function tick() {
-    requestAnimationFrame(tick);
-    drawScene();
-    animate();
-}
 
-function startup() {
-    canvas = document.getElementById("myGLCanvas");
-    gl = createGLContext(canvas);
-    setupShaders();
-    setupBuffers();
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);
-    gl.enable(gl.DEPTH_TEST);
-    tick(); // Start animation loop
-}
-</script>
+        function setupBuffers() {
+            setupSphereBuffers(10);
+            setupCubeBuffers();
+
+
+            setupCylinderBuffers(0.1);
+            setupCylinderBuffers(0.2);
+
+            setupPanelBuffers();
+
+            setupDishBuffers();
+        }
+
+        function uploadModelViewMatrixToShader() {
+            gl.uniformMatrix4fv(shaderProgram.uniformMVMatrix, false,
+                modelViewMatrix);
+        }
+        function uploadProjectionMatrixToShader() {
+            gl.uniformMatrix4fv(shaderProgram.uniformProjMatrix, false, projectionMatrix);
+        }
+        function drawSphere(r, g, b, a) {
+            gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
+            gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexPositionBuffer);
+            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
+                sphereVertexPositionBuffer.itemSize,
+                gl.FLOAT, false, 0, 0);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphereIndexPositionBuffer);
+            gl.drawElements(gl.TRIANGLES, sphereIndexPositionBuffer.numberOfItems,
+                gl.UNSIGNED_SHORT, 0);
+        }
+
+        function drawCube(r, g, b, a) {
+            gl.disableVertexAttribArray(shaderProgram.vertexColorAttribute);
+            gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
+            gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
+            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
+                cubeVertexPositionBuffer.itemSize,
+                gl.FLOAT, false, 0, 0);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
+            gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numberOfItems,
+                gl.UNSIGNED_SHORT, 0);
+        }
+
+        function drawCylinder(r, g, b, a) {
+            gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
+            gl.bindBuffer(gl.ARRAY_BUFFER, cylinderVertexPositionBuffer);
+            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
+                cylinderVertexPositionBuffer.itemSize,
+                gl.FLOAT, false, 0, 0);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cylinderIndexPositionBuffer);
+            gl.drawElements(gl.TRIANGLES, cylinderIndexPositionBuffer.numberOfItems,
+                gl.UNSIGNED_SHORT, 0);
+        }
+
+
+        function drawPanel(r, g, b, a) {
+            gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
+            gl.bindBuffer(gl.ARRAY_BUFFER, panelVertexPositionBuffer);
+            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, panelVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, panelIndexBuffer);
+            gl.drawElements(gl.TRIANGLES, panelIndexBuffer.numberOfItems, gl.UNSIGNED_SHORT, 0);
+        }
+
+        function drawDish(r, g, b, a) {
+            gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, dishVertexPositionBuffer);
+            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
+                dishVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, dishIndexPositionBuffer);
+            gl.drawElements(gl.TRIANGLES, dishIndexPositionBuffer.numberOfItems, gl.UNSIGNED_SHORT, 0);
+        }
+
+
+        function drawSatellite() {
+
+            
+            pushModelViewMatrix();
+            
+
+
+            const satelliteX = satelliteOrbitRadius * Math.cos(satelliteOrbitAngle);
+            const satelliteZ = satelliteOrbitRadius * Math.sin(satelliteOrbitAngle);
+
+            mat4.translate(modelViewMatrix, [satelliteX, 0, satelliteZ]);
+            
+            mat4.rotateY(modelViewMatrix, -satelliteOrbitAngle);
+
+            uploadModelViewMatrixToShader();
+            drawCube(1.0, 1.0, 0.0, 1.0);
+
+
+            pushModelViewMatrix();
+            mat4.translate(modelViewMatrix, [0, 0, -3.5]); // Position left cylinder
+            mat4.rotateZ(modelViewMatrix, Math.PI / 2);
+            mat4.rotateX(modelViewMatrix, Math.PI / 2);
+            uploadModelViewMatrixToShader();
+            drawCylinder(0.0, 1.0, 0.0, 1.0);
+
+            pushModelViewMatrix();
+            mat4.translate(modelViewMatrix, [0, -8.8, 0]); // Move to cylinder's end
+            mat4.rotateY(modelViewMatrix, Math.PI / 2);
+            uploadModelViewMatrixToShader();
+            drawPanel(1.0, 0.0, 0.0, 1.0);
+
+            popModelViewMatrix();
+            popModelViewMatrix();
+
+            pushModelViewMatrix();
+            mat4.translate(modelViewMatrix, [0, 0, 3.5]); // Position left cylinder
+            mat4.rotateZ(modelViewMatrix, Math.PI / 2);
+            mat4.rotateX(modelViewMatrix, Math.PI / 2);
+            uploadModelViewMatrixToShader();
+            drawCylinder(0.0, 0.0, 1.0, 1.0);
+
+            pushModelViewMatrix();
+            mat4.translate(modelViewMatrix, [0, 8.8, 0]); // Move to cylinder's end
+            mat4.rotateY(modelViewMatrix, Math.PI / 2);
+            uploadModelViewMatrixToShader();
+            drawPanel(0.0, 1.0, 0.0, 1.0);
+
+            popModelViewMatrix();
+            popModelViewMatrix();
+
+            pushModelViewMatrix();
+            mat4.translate(modelViewMatrix, [-3.5, 0, 0]);
+            mat4.rotateZ(modelViewMatrix, Math.PI / 2);
+            uploadModelViewMatrixToShader();
+            drawCylinder(0.0, 1.0, 1.0, 1.0);
+
+            pushModelViewMatrix();
+            mat4.translate(modelViewMatrix, [0, 1.2, 0]);
+            mat4.rotateX(modelViewMatrix, Math.PI / -2);
+            uploadModelViewMatrixToShader();
+            drawDish(1.0, 1.0, 1.0, 1.0);
+
+            popModelViewMatrix();
+            popModelViewMatrix();
+
+        }
+
+        function drawEarth() {
+            var angle = elapsedTime * 0.0005;
+            pushModelViewMatrix();
+            mat4.rotateY(modelViewMatrix, angle);
+            uploadModelViewMatrixToShader();
+            drawSphere(0.0, 0.0, 1.0, 1.0);
+            popModelViewMatrix();
+        }
+
+        function drawScene() {
+            gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            mat4.perspective(60, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, projectionMatrix);
+
+            mat4.identity(modelViewMatrix);
+            mat4.lookAt([0, 5, -20], [0, 0, 0], [0, 1, 0], modelViewMatrix);
+
+            uploadProjectionMatrixToShader();
+            uploadModelViewMatrixToShader();
+
+            drawEarth();
+
+
+            drawSatellite();
+        }
+
+        function animate() {
+            var timeNow = new Date().getTime();
+            if (lastTime != 0) {
+                var elapsed = timeNow - lastTime;
+                elapsedTime += elapsed;
+                satelliteOrbitAngle += elapsed * satelliteOrbitSpeed; // Update satellite angle
+            }
+            lastTime = timeNow;
+        }
+
+        function tick() {
+            requestAnimationFrame(tick);
+            drawScene();
+            animate();
+        }
+
+        function startup() {
+            canvas = document.getElementById("myGLCanvas");
+            gl = createGLContext(canvas);
+            setupShaders();
+            setupBuffers();
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.enable(gl.DEPTH_TEST);
+            tick(); // Start animation loop
+        }
+    </script>
 </head>
+
 <body onload="startup();">
-<canvas id="myGLCanvas" width="1920" height="1000"></canvas>
+    <canvas id="myGLCanvas" width="1920" height="1000"></canvas>
 
 </body>
+
 </html>
