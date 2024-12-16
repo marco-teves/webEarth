@@ -444,7 +444,6 @@
                 gl.UNSIGNED_SHORT, 0);
         }
 
-
         function drawPanel(r, g, b, a) {
             gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
             gl.bindBuffer(gl.ARRAY_BUFFER, panelVertexPositionBuffer);
@@ -463,7 +462,6 @@
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, dishIndexPositionBuffer);
             gl.drawElements(gl.TRIANGLES, dishIndexPositionBuffer.numberOfItems, gl.UNSIGNED_SHORT, 0);
         }
-
 
         function drawSatellite(orbitRadius) {
             satelliteOrbitRadius = orbitRadius; // Distance from Earth's center
@@ -585,6 +583,15 @@
                     }
                 }
             });
+
+            document.addEventListener('wheel', function(event) {
+                if (event.shiftKey && event.deltaY > 0) {
+                    console.log('user holding down shift and scrolling up');
+                } else if (event.shiftKey && event.deltaY < 0) {
+                    console.log('user holding down shift and scrolling down');
+                }
+            });
+            
         }
 
         function animate() {
@@ -611,7 +618,7 @@
             handleUserControls();
             gl.clearColor(0.0, 0.0, 0.0, 1.0);
             gl.enable(gl.DEPTH_TEST);
-            tick(); // Start animation loop
+            tick();
         }
     </script>
 </head>
