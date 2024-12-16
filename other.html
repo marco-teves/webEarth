@@ -35,6 +35,7 @@
     }
 </script>
 <script type="text/javascript">
+    
 var gl;
 var canvas;
 var shaderProgram;
@@ -46,7 +47,8 @@ var modelViewMatrixStack;
 var satelliteAngle = 0; 
 var panelVertexPositionBuffer;
 var panelIndexBuffer;
-
+var elapsedTime = 0;
+var lastTime = 0;
 
 function createGLContext(canvas) {
     var names = ["webgl", "experimental-webgl"];
@@ -130,12 +132,12 @@ function popModelViewMatrix() {
     }
     modelViewMatrix = modelViewMatrixStack.pop();
 }
-function setupEarthBuffers(){
+function setupSphereBuffers(radius){
     //using gl.Triangles (drawElements) to draw a sphere
     sphereVertexPositionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexPositionBuffer);
     var sphereVertexPosition=[];
-    var r = 3 // radius
+    var r = radius;
     //choosing an arbitrary value for m and n
     var m=15;
     var n=15;
@@ -160,7 +162,7 @@ function setupEarthBuffers(){
     sphereVertexPositionBuffer.numberOfItems = (m+1)*(n+1);
     sphereIndexPositionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphereIndexPositionBuffer);
-    //generate the indices of the triangle
+
     var sphereIndexPosition=[];
     for (var i=0; i < m; i ++){
         for (var j=0; j < n; j++){
@@ -178,13 +180,12 @@ function setupEarthBuffers(){
             sphereIndexPosition.push(v4);
         }
     }
-    //console.log(sphereIndexPosition);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new
     Uint16Array(sphereIndexPosition),
     gl.STATIC_DRAW);
     sphereIndexPositionBuffer.itemSize = 3;
     sphereIndexPositionBuffer.numberOfItems = m*n*2*3;
-    //calculate vertex normals
+
     var sphereNormalData = [];
     for (var i=0; i <=m; i++){
         for (var j=0; j<=n; j++){
@@ -205,14 +206,14 @@ function setupCubeBuffers() {
     cubeVertexPositionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
     var cubeVertexPosition = [
-    1.0, 1.0, 1.0, //v0
-    -1.0, 1.0, 1.0, //v1
-    -1.0, -1.0, 1.0, //v2
-    1.0, -1.0, 1.0, //v3
-    1.0, 1.0, -1.0, //v4
-    -1.0, 1.0, -1.0, //v5
-    -1.0, -1.0, -1.0, //v6
-    1.0, -1.0, -1.0, //v7
+    3.0, 3.0, 3.0, //v0
+    -3.0, 3.0, 3.0, //v3
+    -3.0, -3.0, 3.0, //v2
+    3.0, -3.0, 3.0, //v3
+    3.0, 3.0, -3.0, //v4
+    -3.0, 3.0, -3.0, //v5
+    -3.0, -3.0, -3.0, //v6
+    3.0, -3.0, -3.0, //v7
     ];
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertexPosition),
     gl.STATIC_DRAW);
@@ -285,17 +286,16 @@ function setupCylinderBuffers() {
     cylinderIndexPositionBuffer.numberOfItems = cylinderIndices.length;
 }
 
-
 function setupPanelBuffers() {
     panelVertexPositionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, panelVertexPositionBuffer);
 
-    // Define vertices for a 2D rectangle in the X-Y plane
+    
     var panelVertexPosition = [
-        0.2, 2.0, 0.0,  // v0 (top-right)
-        -0.2, 2.0, 0.0, // v1 (top-left)
-        -0.2, -2.0, 0.0, // v2 (bottom-left)
-        0.2, -2.0, 0.0   // v3 (bottom-right)
+        2, 8, 0.0,  // v0 (top-right)
+        -2, 8, 0.0, // v1 (top-left)
+        -2, -8, 0.0, // v2 (bottom-left)
+        2, -8, 0.0   // v3 (bottom-right)
     ];
 
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(panelVertexPosition), gl.STATIC_DRAW);
@@ -316,15 +316,70 @@ function setupPanelBuffers() {
     panelIndexBuffer.numberOfItems = 6;
 }
 
+function setupDishBuffers() {
+    dishVertexPositionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, dishVertexPositionBuffer);
+
+    var radius = 2;         // Dish radius
+    var numRings = 20;        // Number of concentric rings
+    var numSegments = 36;     // Number of segments per ring
+    var curvature = 0.5;      // Curvature factor
+    var dishVertices = [];
+    var angleStep = (2 * Math.PI) / numSegments;
+
+    // Generate dish vertices
+    for (let ring = 0; ring <= numRings; ring++) {
+        let r = (ring / numRings) * radius; // Radius at this ring
+        let z = -curvature * (1 - (ring / numRings)) ** 2; // Curved depth on z-axis
+
+        for (let segment = 0; segment <= numSegments; segment++) {
+            let angle = segment * angleStep;
+            let x = r * Math.cos(angle); // x position
+            let y = r * Math.sin(angle); // y position
+
+            dishVertices.push(x, y, z);
+        }
+    }
+
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(dishVertices), gl.STATIC_DRAW);
+    dishVertexPositionBuffer.itemSize = 3;
+    dishVertexPositionBuffer.numberOfItems = (numRings + 1) * (numSegments + 1);
+
+    // Generate indices
+    dishIndexPositionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, dishIndexPositionBuffer);
+
+    var dishIndices = [];
+
+    for (let ring = 0; ring < numRings; ring++) {
+        for (let segment = 0; segment < numSegments; segment++) {
+            let p1 = ring * (numSegments + 1) + segment;
+            let p2 = p1 + numSegments + 1;
+            let p3 = p1 + 1;
+            let p4 = p2 + 1;
+
+            dishIndices.push(p1, p2, p3); // Triangle 1
+            dishIndices.push(p3, p2, p4); // Triangle 2
+        }
+    }
+
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(dishIndices), gl.STATIC_DRAW);
+    dishIndexPositionBuffer.itemSize = 1;
+    dishIndexPositionBuffer.numberOfItems = dishIndices.length;
+}
+
+
 function setupBuffers() {
-    setupEarthBuffers();
+    setupSphereBuffers(10);
     setupCubeBuffers();
 
-    // Set up cylinder buffers with different radii
-    setupCylinderBuffers(0.1); // Default cylinder radius
-    setupCylinderBuffers(0.2); // Larger cylinder radius
+    
+    setupCylinderBuffers(0.1);
+    setupCylinderBuffers(0.2);
 
     setupPanelBuffers();
+
+    setupDishBuffers();
 }
 
 function uploadModelViewMatrixToShader() {
@@ -332,10 +387,9 @@ function uploadModelViewMatrixToShader() {
     modelViewMatrix);
 }
 function uploadProjectionMatrixToShader() {
-    gl.uniformMatrix4fv(shaderProgram.uniformProjMatrix,
-    false, projectionMatrix);
+    gl.uniformMatrix4fv(shaderProgram.uniformProjMatrix, false, projectionMatrix);
 }
-function drawEarth(r,g,b,a) {
+function drawSphere(r,g,b,a) {
     gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
     gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexPositionBuffer);
     gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
@@ -378,21 +432,36 @@ function drawPanel(r, g, b, a) {
     gl.drawElements(gl.TRIANGLES, panelIndexBuffer.numberOfItems, gl.UNSIGNED_SHORT, 0);
 }
 
-function drawSatellite() {
+function drawDish(r, g, b, a) {
+    gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
 
-    // Draw Cube
+    gl.bindBuffer(gl.ARRAY_BUFFER, dishVertexPositionBuffer);
+    gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, 
+        dishVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, dishIndexPositionBuffer);
+    gl.drawElements(gl.TRIANGLES, dishIndexPositionBuffer.numberOfItems, gl.UNSIGNED_SHORT, 0);
+}
+
+
+function drawSatellite() {
+    var angle = elapsedTime * 0.001;
+
+    pushModelViewMatrix();
+    mat4.rotateY(modelViewMatrix, angle); // Rotate around the Y-axis
+    uploadModelViewMatrixToShader();
     drawCube(1.0, 1.0, 0.0, 1.0);
 
-    // Draw Left Cylinder
+
     pushModelViewMatrix();
-    mat4.translate(modelViewMatrix, [-1, 0, 0]); // Position left cylinder
+    mat4.translate(modelViewMatrix, [-4, 0, 0]); // Position left cylinder
     mat4.rotateZ(modelViewMatrix, Math.PI / 2);    // Orient cylinder along x-axis
     uploadModelViewMatrixToShader();
     drawCylinder(0.0, 1.0, 0.0, 1.0); // Green cylinder
 
     // Attach left panel
     pushModelViewMatrix();
-    mat4.translate(modelViewMatrix, [0, 2.8, 0]); // Move to cylinder's end
+    mat4.translate(modelViewMatrix, [0, 8.8, 0]); // Move to cylinder's end
     mat4.rotateY(modelViewMatrix, Math.PI / 1.5);
     uploadModelViewMatrixToShader();
     drawPanel(1.0, 0.0, 0.0, 1.0); // Red panel
@@ -402,14 +471,14 @@ function drawSatellite() {
 
     // Draw Right Cylinder
     pushModelViewMatrix();
-    mat4.translate(modelViewMatrix, [1, 0, 0]); // Position right cylinder
+    mat4.translate(modelViewMatrix, [4, 0, 0]); // Position right cylinder
     mat4.rotateZ(modelViewMatrix, Math.PI / 2);   // Orient cylinder along x-axis
     uploadModelViewMatrixToShader();
     drawCylinder(0.0, 0.0, 1.0, 1.0); // Blue cylinder
 
     // Attach right panel
     pushModelViewMatrix();
-    mat4.translate(modelViewMatrix, [0, -2.8, 0]); // Move to cylinder's end
+    mat4.translate(modelViewMatrix, [0, -8.8, 0]); // Move to cylinder's end
     mat4.rotateY(modelViewMatrix, Math.PI / 1.5);  
     uploadModelViewMatrixToShader();
     drawPanel(0.0, 1.0, 0.0, 1.0); // Green panel
@@ -417,49 +486,76 @@ function drawSatellite() {
 
     popModelViewMatrix();
 
-
     pushModelViewMatrix();
     mat4.translate(modelViewMatrix, [0, 0, -3]); // Position right cylinder
     mat4.rotateX(modelViewMatrix, Math.PI / 2);   // Orient cylinder along x-axis
     uploadModelViewMatrixToShader();
     drawCylinder(0.0, 1.0, 1.0, 1.0); // Blue cylinder
-    
+
+    pushModelViewMatrix();
+    mat4.translate(modelViewMatrix, [0, -1.2, 0]); // Move dish to the front of the cube
+    mat4.rotateX(modelViewMatrix, Math.PI/2);
+    uploadModelViewMatrixToShader();
+    drawDish(1.0, 1.0, 1.0, 1.0);
+
+    popModelViewMatrix();
+    popModelViewMatrix();
+    popModelViewMatrix();
+}
+
+function drawEarth() {
+    pushModelViewMatrix();
+    mat4.translate(modelViewMatrix, [0, 0, 0]);
+    uploadModelViewMatrixToShader();
+    drawSphere(0.0, 0.0, 1.0, 1.0);
     popModelViewMatrix();
 }
 
 function drawScene() {
-    
-    gl.viewport(10, 10, gl.viewportWidth, gl.viewportHeight);
+    gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     mat4.perspective(60, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, projectionMatrix);
+
     mat4.identity(modelViewMatrix);
     mat4.lookAt([0, 5, -20], [0, 0, 0], [0, 1, 0], modelViewMatrix);
 
-    pushModelViewMatrix();
-    uploadModelViewMatrixToShader();
     uploadProjectionMatrixToShader();
-    //drawEarth(0.0, 0.0, 1.0, 1.0);
-    drawSatellite();
+    uploadModelViewMatrixToShader();
     
+
+    // Draw the Satellite
+    drawSatellite();
 }
 
+function animate() {
+    var timeNow = new Date().getTime();
+    if (lastTime != 0) {
+        var elapsed = timeNow - lastTime;
+        elapsedTime += elapsed;
+    }
+    lastTime = timeNow;
+}
 
+function tick() {
+    requestAnimationFrame(tick);
+    drawScene();
+    animate();
+}
 
 function startup() {
     canvas = document.getElementById("myGLCanvas");
-    gl = WebGLDebugUtils.makeDebugContext(createGLContext(canvas));
+    gl = createGLContext(canvas);
     setupShaders();
     setupBuffers();
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
     gl.enable(gl.DEPTH_TEST);
-    drawScene();
-    
+    tick(); // Start animation loop
 }
 </script>
 </head>
 <body onload="startup();">
-<canvas id="myGLCanvas" width="1000" height="800"></canvas>
+<canvas id="myGLCanvas" width="1920" height="1000"></canvas>
 
 </body>
 </html>
