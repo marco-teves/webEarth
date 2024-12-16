@@ -19,37 +19,58 @@
     <meta charset="utf-8">
     <script src="glMatrix.js"></script>
     <script src="webgl-debug.js"></script>
+    <!--Texture Shaders-->
     <script id="shader-vs" type="x-shader/x-vertex">
         attribute vec3 aVertexPosition;
-attribute vec2 aTextureCoord; // Add texture coordinates
+        attribute vec2 aTextureCoord; // Add texture coordinates
 
-uniform mat4 uMVMatrix;
-uniform mat4 uPMatrix;
+        uniform mat4 uMVMatrix;
+        uniform mat4 uPMatrix;
 
-varying vec2 vTextureCoord;
+        varying vec2 vTextureCoord;
 
-void main() {
-    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
-    vTextureCoord = aTextureCoord; // Pass texture coordinates to fragment shader
-}
+        void main() {
+            gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+        vTextureCoord = aTextureCoord; // Pass texture coordinates to fragment shader
+        }
 
-</script>
+    </script>
     <script id="shader-fs" type="x-shader/x-fragment">
         precision mediump float;
 
-varying vec2 vTextureCoord; // Interpolated texture coordinates from vertex shader
-uniform sampler2D uSampler; // Texture sampler
+        varying vec2 vTextureCoord; // Interpolated texture coordinates from vertex shader
+        uniform sampler2D uSampler; // Texture sampler
 
-void main() {
-    gl_FragColor = texture2D(uSampler, vTextureCoord); // Sample texture
-}
+        void main() {
+            gl_FragColor = texture2D(uSampler, vTextureCoord); // Sample texture
+        }
 
+    </script>
+    <!-- Golden Shaders -->
+    <script id="golden-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+
+    void main(void) {
+        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+    }
+</script>
+
+    <script id="golden-fs" type="x-shader/x-fragment">
+    precision mediump float;
+
+    void main(void) {
+        gl_FragColor = vec4(1.0, 0.84, 0.0, 1.0); // Solid golden color (RGBA)
+    }
 </script>
     <script type="text/javascript">
 
         var gl;
         var canvas;
         var shaderProgram;
+        var goldenShaderProgram;
         var sphereVertexPositionBuffer;
         var sphereIndexPositionBuffer;
         var modelViewMatrix;
@@ -61,7 +82,7 @@ void main() {
         var elapsedTime = 0;
         var lastTime = 0;
 
-        var satelliteOrbitRadius = 50; // Distance from Earth's center
+        var satelliteOrbitRadius = 50; // Distance from Earth"s center
         var satelliteOrbitSpeed = 0.001;
         var satelliteOrbitAngle = 0;
 
@@ -151,6 +172,26 @@ void main() {
             gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
         }
 
+        function setupGoldenShader() {
+            var goldenVertexShader = loadShaderFromDOM("golden-vs");
+            var goldenFragmentShader = loadShaderFromDOM("golden-fs");
+            goldenShaderProgram = gl.createProgram();
+
+            gl.attachShader(goldenShaderProgram, goldenVertexShader);
+            gl.attachShader(goldenShaderProgram, goldenFragmentShader);
+            gl.linkProgram(goldenShaderProgram);
+
+            if (!gl.getProgramParameter(goldenShaderProgram, gl.LINK_STATUS)) {
+                alert("Failed to setup golden shaders");
+            }
+
+            // Get attribute and uniform locations
+            goldenShaderProgram.vertexPositionAttribute = gl.getAttribLocation(goldenShaderProgram, "aVertexPosition");
+            gl.enableVertexAttribArray(goldenShaderProgram.vertexPositionAttribute);
+
+            goldenShaderProgram.uMVMatrix = gl.getUniformLocation(goldenShaderProgram, "uMVMatrix");
+            goldenShaderProgram.uPMatrix = gl.getUniformLocation(goldenShaderProgram, "uPMatrix");
+        }
 
         function pushModelViewMatrix() {
             var copyToPush = mat4.create(modelViewMatrix);
@@ -493,14 +534,9 @@ void main() {
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
                 gl.bindTexture(gl.TEXTURE_2D, null);
-
-                // Debug Check: Verify texture
-                console.log("solarPanelTexture:", solarPanelTexture);
-                if (!solarPanelTexture) {
-                    console.error("Texture not loaded properly.");
-                }
             };
             solarPanelImage.src = "solarPanel.jpg";
+            console.log("solar panel texture loaded!!!!!!!");
 
             earthTexture = gl.createTexture();
             earthTexture.image = new Image();
@@ -508,7 +544,7 @@ void main() {
                 handleTextureLoaded(earthTexture);
             }
             earthTexture.image.src = "earth.jpg";
-            console.log('earth texture loaded');
+            console.log("earth texture loaded!1");
         }
 
         function handleTextureLoaded(texture) {
@@ -538,17 +574,24 @@ void main() {
                 gl.UNSIGNED_SHORT, 0);
         }
 
-        function drawCube(r, g, b, a) {
-            gl.disableVertexAttribArray(shaderProgram.vertexColorAttribute);
-            gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
+        function drawCube() {
+            gl.useProgram(goldenShaderProgram);
+
+            gl.uniformMatrix4fv(goldenShaderProgram.uMVMatrix, false, modelViewMatrix);
+            gl.uniformMatrix4fv(goldenShaderProgram.uPMatrix, false, projectionMatrix);
+
             gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
-            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
-                cubeVertexPositionBuffer.itemSize,
-                gl.FLOAT, false, 0, 0);
+            gl.vertexAttribPointer(goldenShaderProgram.vertexPositionAttribute,
+                cubeVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
-            gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numberOfItems,
-                gl.UNSIGNED_SHORT, 0);
+
+            gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numberOfItems, gl.UNSIGNED_SHORT, 0);
+        
+            gl.useProgram(shaderProgram);
         }
+
+
 
         function drawCylinder(r, g, b, a) {
             gl.vertexAttrib4f(shaderProgram.vertexColorAttribute, r, g, b, a);
@@ -597,7 +640,7 @@ void main() {
         }
 
         function drawSatellite(orbitRadius) {
-            satelliteOrbitRadius = orbitRadius; // Distance from Earth's center
+            satelliteOrbitRadius = orbitRadius; // Distance from Earth"s center
 
             pushModelViewMatrix();
 
@@ -620,7 +663,7 @@ void main() {
             drawCylinder(0.0, 1.0, 0.0, 1.0);
 
             pushModelViewMatrix();
-            mat4.translate(modelViewMatrix, [0, -8.8, 0]); // Move to cylinder's end
+            mat4.translate(modelViewMatrix, [0, -8.8, 0]); // Move to cylinder"s end
             mat4.rotateY(modelViewMatrix, Math.PI / 2);
             uploadModelViewMatrixToShader();
             drawPanel();
@@ -636,7 +679,7 @@ void main() {
             drawCylinder(0.0, 0.0, 1.0, 1.0);
 
             pushModelViewMatrix();
-            mat4.translate(modelViewMatrix, [0, 8.8, 0]); // Move to cylinder's end
+            mat4.translate(modelViewMatrix, [0, 8.8, 0]); // Move to cylinder"s end
             mat4.rotateY(modelViewMatrix, Math.PI / 2);
             uploadModelViewMatrixToShader();
             drawPanel();
@@ -683,58 +726,58 @@ void main() {
         }
 
         function handleUserControls() {
-            document.addEventListener('keydown', function (event) {
-                if (event.key === 'ArrowRight') {
+            document.addEventListener("keydown", function (event) {
+                if (event.key === "ArrowRight") {
                     satelliteOrbitRadius += 1;
-                    console.log('moving further from earth');
-                } else if (event.key === 'ArrowLeft') {
+                    console.log("moving further from earth");
+                } else if (event.key === "ArrowLeft") {
                     if (satelliteOrbitRadius > 40) {
                         satelliteOrbitRadius -= 1;
-                        console.log('moving closer to earth');
+                        console.log("moving closer to earth");
                     } else {
-                        console.log('TOO CLOSE BRUH!!!!!!!!!!!!!!!!!!!');
+                        console.log("TOO CLOSE BRUH!!!!!!!!!!!!!!!!!!!");
                     }
                 }
             });
 
-            document.addEventListener('keydown', function (event) {
-                if (event.key === 'ArrowUp') {
+            document.addEventListener("keydown", function (event) {
+                if (event.key === "ArrowUp") {
                     satelliteOrbitSpeed += 0.001;
-                    console.log('speedup!!!!!!!!!1');
-                } else if (event.key === 'ArrowDown') {
+                    console.log("speedup!!!!!!!!!1");
+                } else if (event.key === "ArrowDown") {
                     if (satelliteOrbitSpeed > 0.001) {
                         satelliteOrbitSpeed -= 0.001;
-                        console.log('slowdown!!');
+                        console.log("slowdown!!");
                     } else {
-                        console.log('slow down limit reached :>');
+                        console.log("slow down limit reached, do u want to crash to the earth? :>");
                     }
                 }
             });
 
-            document.addEventListener('wheel', function (event) {
+            document.addEventListener("wheel", function (event) {
                 if (event.deltaY > 0) {
                     zoomValue += 5;
-                    console.log('user holding down shift and scrolling up');
+                    console.log("user holding down shift and scrolling up");
                 } else if (event.deltaY < 0) {
                     zoomValue -= 5;
-                    console.log('user holding down shift and scrolling down');
+                    console.log("user holding down shift and scrolling down");
                 }
             });
 
 
-            document.addEventListener('mousedown', function (event) {
+            document.addEventListener("mousedown", function (event) {
                 if (event.shiftKey) {
                     let startX = event.clientX;
                     let lastX = startX;
-                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener("mousemove", onMouseMove);
 
                     function onMouseMove(event) {
                         if (event.clientX < lastX) {
                             moveX -= 5;
-                            console.log('user holding down shift and dragging left');
+                            console.log("user holding down shift and dragging left");
                         } else if (event.clientX > lastX) {
                             moveX += 5;
-                            console.log('user holding down shift and dragging right');
+                            console.log("user holding down shift and dragging right");
                         }
                         lastX = event.clientX;
                     }
@@ -742,15 +785,15 @@ void main() {
                 else if (event.altKey) {
                     let startY = event.clientY;
                     let lastY = startY;
-                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener("mousemove", onMouseMove);
 
                     function onMouseMove(event) {
                         if (event.clientY < lastY) {
                             moveY += 5;
-                            console.log('user alt dragging up');
+                            console.log("user alt dragging up");
                         } else if (event.clientY > lastY) {
                             moveY -= 5;
-                            console.log('user alt dragging down');
+                            console.log("user alt dragging down");
                         }
                         lastY = event.clientY;
                     }
@@ -760,22 +803,22 @@ void main() {
                     let startX = event.clientX;
                     let lastX = startX;
 
-                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener("mousemove", onMouseMove);
 
                     function onMouseMove(event) {
                         if (event.clientY < lastY) {
                             if (rotateY < 200) {
                                 rotateY += 5;
-                                console.log('user JUST dragging up', rotateY);
+                                console.log("user JUST dragging up", rotateY);
                             } else {
-                                console.log('TOO HIGH BRUH!!!!!!!!!!!!!!!!!!!');
+                                console.log("TOO HIGH BRUH!!!!!!!!!!!!!!!!!!!");
                             }
                         } else if (event.clientY > lastY) {
                             if (rotateY > -200) {
                                 rotateY -= 5;
-                                console.log('user JUST dragging down', rotateY);
+                                console.log("user JUST dragging down", rotateY);
                             } else {
-                                console.log('TOO LOW BRUH!!!!!!!!!!!!!!!!!!!');
+                                console.log("TOO LOW BRUH!!!!!!!!!!!!!!!!!!!");
                             }
                         }
                         lastY = event.clientY;
@@ -783,23 +826,23 @@ void main() {
                         if (event.clientX < lastX) {
                             if (rotateX > -200) {
                                 rotateX -= 5;
-                                console.log('user JUST dragging left', rotateX);
+                                console.log("user JUST dragging left", rotateX);
                             } else {
-                                console.log('TOO LEFT BRUH!!!!!!!!!!!!!!!!!!!');
+                                console.log("TOO LEFT BRUH!!!!!!!!!!!!!!!!!!!");
                             }
                         } else if (event.clientX > lastX) {
                             if (rotateX < 200) {
                                 rotateX += 5;
-                                console.log('user JUST dragging right', rotateX);
+                                console.log("user JUST dragging right", rotateX);
                             } else {
-                                console.log('TOO RIGHT BRUH!!!!!!!!!!!!!!!!!!!');
+                                console.log("TOO RIGHT BRUH!!!!!!!!!!!!!!!!!!!");
                             }
                         }
                         lastX = event.clientX;
                     }
                 }
-                document.addEventListener('mouseup', function () {
-                    document.removeEventListener('mousemove', onMouseMove);
+                document.addEventListener("mouseup", function () {
+                    document.removeEventListener("mousemove", onMouseMove);
                 }, { once: true });
             });
         }
@@ -824,8 +867,10 @@ void main() {
             canvas = document.getElementById("myGLCanvas");
             gl = createGLContext(canvas);
             setupShaders();
+
             setupBuffers();
             setupTextures();
+            setupGoldenShader();
             handleUserControls();
             gl.clearColor(0.0, 0.0, 0.0, 1.0);
             gl.enable(gl.DEPTH_TEST);
