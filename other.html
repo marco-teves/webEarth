@@ -58,6 +58,13 @@
         var satelliteOrbitAngle = 0;
 
         var zoomValue = 100;
+        var moveX = 0;
+        var moveY = 0;
+
+        var rotateX = 0;
+        var rotateY = 0;
+
+        var isPanning = false;
 
         function createGLContext(canvas) {
             var names = ["webgl", "experimental-webgl"];
@@ -537,14 +544,14 @@
             popModelViewMatrix();
         }
 
-        function drawScene(zoomValue) {
+        function drawScene(zoomValue, rotateX, rotateY, moveX, moveY) {
             gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
             mat4.perspective(60, gl.viewportWidth / gl.viewportHeight, 0.1, 500.0, projectionMatrix);
 
             mat4.identity(modelViewMatrix);
-            mat4.lookAt([zoomValue, 5, -20], [0, 0, 0], [0, 1, 0], modelViewMatrix);
+            mat4.lookAt([rotateX, rotateY, zoomValue], [moveX, moveY, 0], [0, 1, 0], modelViewMatrix);
 
             uploadProjectionMatrixToShader();
             uploadModelViewMatrixToShader();
@@ -558,11 +565,11 @@
             document.addEventListener('keydown', function(event) {
                 if (event.key === 'ArrowRight') {
                     satelliteOrbitRadius += 1;
-                    console.log('Right arrow pressed');
+                    console.log('moving further from earth');
                 } else if (event.key === 'ArrowLeft') {
                     if (satelliteOrbitRadius > 40) {
                         satelliteOrbitRadius -= 1;
-                        console.log('Left arrow pressed');
+                        console.log('moving closer to earth');
                     } else {
                         console.log('TOO CLOSE BRUH!!!!!!!!!!!!!!!!!!!');
                     }
@@ -578,20 +585,103 @@
                         satelliteOrbitSpeed -= 0.001;
                         console.log('slowdown!!');
                     } else {
-                        console.log('cant stop');
+                        console.log('slow down limit reached :>');
                     }
                 }
             });
 
             document.addEventListener('wheel', function(event) {
-                if (event.shiftKey && event.deltaY > 0) {
+                if (event.deltaY > 0) {
                     zoomValue += 5;
                     console.log('user holding down shift and scrolling up');
-                } else if (event.shiftKey && event.deltaY < 0) {
+                } else if (event.deltaY < 0) {
                     zoomValue -= 5;
                     console.log('user holding down shift and scrolling down');
                 }
             });
+            
+
+            document.addEventListener('mousedown', function(event) {
+                if (event.shiftKey) {
+                    let startX = event.clientX;
+                    let lastX = startX;
+                    document.addEventListener('mousemove', onMouseMove);
+
+                    function onMouseMove(event) {
+                        if (event.clientX < lastX) {
+                            moveX -= 5;
+                            console.log('user holding down shift and dragging left');
+                        } else if (event.clientX > lastX) {
+                            moveX += 5;
+                            console.log('user holding down shift and dragging right');
+                        }
+                        lastX = event.clientX;
+                    }
+                }
+                else if (event.altKey) {
+                    let startY = event.clientY;
+                    let lastY = startY;
+                    document.addEventListener('mousemove', onMouseMove);
+
+                    function onMouseMove(event) {
+                        if (event.clientY < lastY) {
+                            moveY += 5;
+                            console.log('user alt dragging up');
+                        } else if (event.clientY > lastY) {
+                            moveY -= 5;
+                            console.log('user alt dragging down');
+                        }
+                        lastY = event.clientY;
+                    }
+                } else {
+                    let startY = event.clientY;
+                    let lastY = startY;
+                    let startX = event.clientX;
+                    let lastX = startX;
+                    
+                    document.addEventListener('mousemove', onMouseMove);
+
+                    function onMouseMove(event) {
+                        if (event.clientY < lastY) {
+                            if (rotateY < 200){
+                                rotateY += 5;
+                                console.log('user JUST dragging up', rotateY);  
+                            } else {
+                                console.log('TOO HIGH BRUH!!!!!!!!!!!!!!!!!!!');
+                            }
+                        } else if (event.clientY > lastY) {
+                            if (rotateY > -200){
+                                rotateY -= 5;
+                                console.log('user JUST dragging down', rotateY);
+                            } else {
+                                console.log('TOO LOW BRUH!!!!!!!!!!!!!!!!!!!');
+                            }
+                        }
+                        lastY = event.clientY;
+
+                        if (event.clientX < lastX) {
+                            if (rotateX > -200){
+                                rotateX -= 5;
+                                console.log('user JUST dragging left', rotateX);  
+                            } else {
+                                console.log('TOO LEFT BRUH!!!!!!!!!!!!!!!!!!!');
+                            }
+                        } else if (event.clientX > lastX) {
+                            if (rotateX < 200){
+                                rotateX += 5;
+                                console.log('user JUST dragging right', rotateX);
+                            } else {
+                                console.log('TOO RIGHT BRUH!!!!!!!!!!!!!!!!!!!');
+                            }
+                        }
+                        lastX = event.clientX;
+                    } 
+                }
+                document.addEventListener('mouseup', function() {
+                        document.removeEventListener('mousemove', onMouseMove);
+                    }, { once: true });
+            });
+
             
         }
 
@@ -607,8 +697,8 @@
 
         function tick() {
             requestAnimationFrame(tick);
-            drawScene(zoomValue);
-            animate();
+            drawScene(zoomValue, rotateX, rotateY, moveX, moveY);
+            //animate();
         }
 
         function startup() {
