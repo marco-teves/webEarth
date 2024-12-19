@@ -1,6 +1,5 @@
 <!DOCTYPE HTML>
 <html lang="en">
-
 <head>
     <style>
         body,
@@ -105,7 +104,7 @@
             gl_Position = uPMatrix * positionEye;
         }
 
-</script>
+    </script>
 
     <script id="golden-fs" type="x-shader/x-fragment">
         precision mediump float;
@@ -142,7 +141,7 @@
 
         
         
-</script>
+    </script>
     <script type="text/javascript">
 
         let gl;
@@ -160,7 +159,7 @@
         let lastTime = 0;
 
         let satelliteOrbitRadius = 50;
-        let satelliteOrbitSpeed = 0.001;
+        let satelliteOrbitSpeed = 0.0005;
         let satelliteOrbitAngle = 0;
 
         let zoomValue = 100;
@@ -232,13 +231,10 @@
             gl.useProgram(shaderProgram);
 
             shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
-            console.log("aVertexPosition Location:", shaderProgram.vertexPositionAttribute);
 
             shaderProgram.vertexNormalAttribute = gl.getAttribLocation(shaderProgram, "aVertexNormal");
-            console.log("aVertexNormal Location:", shaderProgram.vertexNormalAttribute);
 
             shaderProgram.vertexTextureCoordAttribute = gl.getAttribLocation(shaderProgram, "aTextureCoord");
-            console.log("aTextureCoord Location:", shaderProgram.vertexTextureCoordAttribute);
 
             shaderProgram.uLightDirection = gl.getUniformLocation(shaderProgram, "uLightDirection");
             shaderProgram.uLightColor = gl.getUniformLocation(shaderProgram, "uLightColor");
@@ -264,9 +260,6 @@
 
             shaderProgram.uLightDirection = gl.getUniformLocation(shaderProgram, "uLightDirection");
             shaderProgram.uLightColor = gl.getUniformLocation(shaderProgram, "uLightColor");
-
-            console.log("uLightDirection Location:", shaderProgram.uLightDirection);
-            console.log("uLightColor Location:", shaderProgram.uLightColor);
         }
 
         function setupGoldenShader() {
@@ -294,7 +287,6 @@
             goldenShaderProgram.uLightDirection = gl.getUniformLocation(goldenShaderProgram, "uLightDirection");
             goldenShaderProgram.uLightColor = gl.getUniformLocation(goldenShaderProgram, "uLightColor");
 
-            console.log("Golden Shader Attributes and Uniforms Setup Complete");
         }
 
         function setLightingUniforms() {
@@ -430,7 +422,6 @@
             cubeVertexPositionBuffer.itemSize = 3;
             cubeVertexPositionBuffer.numberOfItems = 24;
 
-            // Normals for each face of the cube
             cubeNormalBuffer = gl.createBuffer();
             gl.bindBuffer(gl.ARRAY_BUFFER, cubeNormalBuffer);
 
@@ -453,7 +444,6 @@
             cubeNormalBuffer.itemSize = 3;
             cubeNormalBuffer.numberOfItems = 24;
 
-            // Indices for the cube (two triangles per face, 6 faces total)
             cubeVertexIndexBuffer = gl.createBuffer();
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
 
@@ -871,27 +861,27 @@
         }
 
         function drawSatellite(orbitRadius) {
+            // combines cube, cylinder, dish, and panel to create a satellite
+
             satelliteOrbitRadius = orbitRadius;
             pushModelViewMatrix();
-
             const satelliteX = satelliteOrbitRadius * Math.cos(satelliteOrbitAngle);
             const satelliteZ = satelliteOrbitRadius * Math.sin(satelliteOrbitAngle);
-
             mat4.translate(modelViewMatrix, [satelliteX, 0, satelliteZ]);
-
             mat4.rotateY(modelViewMatrix, -satelliteOrbitAngle);
-
+            
+            //cube
             uploadModelViewMatrixToShader();
             drawCube(1.0, 1.0, 0.0, 1.0);
 
-
+            //left cylinder
             pushModelViewMatrix();
             mat4.translate(modelViewMatrix, [0, 0, -3.5]);
             mat4.rotateZ(modelViewMatrix, Math.PI / 2);
             mat4.rotateX(modelViewMatrix, Math.PI / 2);
             uploadModelViewMatrixToShader();
             drawCylinder(0.0, 1.0, 0.0, 1.0);
-
+            //left panel
             pushModelViewMatrix();
             mat4.translate(modelViewMatrix, [0, -8.8, 0]);
             mat4.rotateY(modelViewMatrix, Math.PI / 2);
@@ -900,14 +890,14 @@
 
             popModelViewMatrix();
             popModelViewMatrix();
-
+            //right cylinder
             pushModelViewMatrix();
             mat4.translate(modelViewMatrix, [0, 0, 3.5]);
             mat4.rotateZ(modelViewMatrix, Math.PI / 2);
             mat4.rotateX(modelViewMatrix, Math.PI / 2);
             uploadModelViewMatrixToShader();
             drawCylinder(0.0, 0.0, 1.0, 1.0);
-
+            //right panel
             pushModelViewMatrix();
             mat4.translate(modelViewMatrix, [0, 8.8, 0]);
             mat4.rotateY(modelViewMatrix, Math.PI / 2);
@@ -917,12 +907,13 @@
             popModelViewMatrix();
             popModelViewMatrix();
 
+            //front cylinder
             pushModelViewMatrix();
             mat4.translate(modelViewMatrix, [-3.5, 0, 0]);
             mat4.rotateZ(modelViewMatrix, Math.PI / 2);
             uploadModelViewMatrixToShader();
             drawCylinder(0.0, 1.0, 1.0, 1.0);
-
+            //front dish
             pushModelViewMatrix();
             mat4.translate(modelViewMatrix, [0, 1.2, 0]);
             mat4.rotateX(modelViewMatrix, Math.PI / -2);
@@ -935,10 +926,11 @@
         }
 
         function drawEarth() {
+            // uses sphere and manipulates the y rotation to create the spinning effect
             let angle = elapsedTime * 0.0003;
             pushModelViewMatrix();
             mat4.rotateY(modelViewMatrix, angle);
-            mat4.rotateX(modelViewMatrix, 60);
+            mat4.rotateX(modelViewMatrix, 60); // tilt the earth like in real life
             uploadModelViewMatrixToShader();
             drawSphere();
             popModelViewMatrix();
@@ -957,8 +949,9 @@
             drawEarth();
             drawSatellite(satelliteOrbitRadius);
         }
-        // USER CONTROLSSSSSS
+        // USER CONTROLSSSSSS //////////////////////////
         function handleUserControls() {
+            //controls for moving the satellite
             document.addEventListener("keydown", function (event) {
                 if (event.key === "ArrowRight") {
                     satelliteOrbitRadius += 1;
@@ -972,7 +965,8 @@
                     }
                 }
             });
-
+            
+            //satellite speed controls
             document.addEventListener("keydown", function (event) {
                 if (event.key === "ArrowUp") {
                     satelliteOrbitSpeed += 0.001;
@@ -986,19 +980,30 @@
                     }
                 }
             });
-
+            // controls for zooming in and out
             document.addEventListener("wheel", function (event) {
                 if (event.deltaY > 0) {
-                    zoomValue += 5;
-                    console.log("user scrolling up");
+                    if (zoomValue < 200) {
+                        zoomValue += 5;
+                        console.log("user scrolling up", zoomValue);
+                    } else {
+                        console.log("maximum zoom out reached");
+                    }
                 } else if (event.deltaY < 0) {
-                    zoomValue -= 5;
-                    console.log("user scrolling down");
+                    if (zoomValue > 40) {
+                        zoomValue -= 5;
+                        console.log("user scrolling down", zoomValue);
+                    } else {
+                        console.log("maximum zoom in reached");
+                    }
                 }
             });
 
-
+            // controls for rotating the camera
+            //kind of buggy so introduced limits to prevent the camera from going too far
+            // ¯\_(ツ)_/¯
             document.addEventListener("mousedown", function (event) {
+                // if shift key is pressed, user can drag left or right to rotate the camera
                 if (event.shiftKey) {
                     let startX = event.clientX;
                     let lastX = startX;
@@ -1007,14 +1012,15 @@
                     function onMouseMove(event) {
                         if (event.clientX < lastX) {
                             moveX -= 5;
-                            console.log("user holding down shift and dragging left");
+                            console.log("user holding down shift and dragging left <");
                         } else if (event.clientX > lastX) {
                             moveX += 5;
-                            console.log("user holding down shift and dragging right");
+                            console.log("user holding down shift and dragging right >");
                         }
                         lastX = event.clientX;
                     }
                 }
+                // if alt key is pressed, user can drag up or down to zoom in or out
                 else if (event.altKey) {
                     let startY = event.clientY;
                     let lastY = startY;
@@ -1023,14 +1029,15 @@
                     function onMouseMove(event) {
                         if (event.clientY < lastY) {
                             moveY += 5;
-                            console.log("user alt dragging up");
+                            console.log("user alt dragging up ^");
                         } else if (event.clientY > lastY) {
                             moveY -= 5;
-                            console.log("user alt dragging down");
+                            console.log("user alt dragging down v");
                         }
                         lastY = event.clientY;
                     }
                 } else {
+                    // if neither shift nor alt key is pressed, user can drag up down l and r to rotate the camera
                     let startY = event.clientY;
                     let lastY = startY;
                     let startX = event.clientX;
@@ -1074,6 +1081,7 @@
                         lastX = event.clientX;
                     }
                 }
+                // remove the event listener after the user releases the mouse
                 document.addEventListener("mouseup", function () {
                     document.removeEventListener("mousemove", onMouseMove);
                 }, { once: true });
@@ -1081,11 +1089,12 @@
         }
 
         function animate() {
+            // Update the elapsed time and the orbit angle
             let timeNow = new Date().getTime();
             if (lastTime != 0) {
                 let elapsed = timeNow - lastTime;
                 elapsedTime += elapsed;
-                satelliteOrbitAngle += elapsed * satelliteOrbitSpeed; // Update satellite angle
+                satelliteOrbitAngle += elapsed * satelliteOrbitSpeed; 
             }
             lastTime = timeNow;
         }
@@ -1095,7 +1104,6 @@
             drawScene(zoomValue, rotateX, rotateY, moveX, moveY);
             animate();
         }
-
 
         function startup() {
             canvas = document.getElementById("myGLCanvas");
@@ -1107,14 +1115,14 @@
             handleUserControls();
             gl.clearColor(0.0, 0.0, 0.0, 1.0);
             gl.enable(gl.DEPTH_TEST);
+            //animate();
             tick();
         }
     </script>
 </head>
 
 <body onload="startup();">
-    <canvas id="myGLCanvas" width="1920" height="1080"></canvas>
-
+    <canvas id="myGLCanvas" width="1920" height="1000"></canvas>
 </body>
 
 </html>
