@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <style>
+        /* Styling to make it full screen (kind of)*/
         body,
         html {
             margin: 0;
@@ -168,7 +169,7 @@
 
         let rotateX = 0;
         let rotateY = 0;
-
+        // initial setup
         function createGLContext(canvas) {
             let names = ["webgl", "experimental-webgl"];
             let context = null;
@@ -188,6 +189,7 @@
             }
             return context;
         }
+        
         function loadShaderFromDOM(id) {
             let shaderScript = document.getElementById(id);
             if (!shaderScript) {
@@ -289,13 +291,13 @@
 
         }
 
-        function setLightingUniforms() {
-            let lightDirection = [-5, -5, 0];
+        function setUpLighting() {
+            let lightOrigin = [-5, -5, 0];
             let lightColor = [1, 1, 1];
             let ambientLightColor = [0.4, 0.4, 0.4];
             let specularColor = [0.5, 0.5, 0.5];
 
-            gl.uniform3fv(shaderProgram.uLightDirection, lightDirection);
+            gl.uniform3fv(shaderProgram.uLightDirection, lightOrigin);
             gl.uniform3fv(shaderProgram.uLightColor, lightColor);
             gl.uniform3fv(shaderProgram.uAmbientLightColor, ambientLightColor);
             gl.uniform3fv(shaderProgram.uSpecularColor, specularColor);
@@ -327,8 +329,8 @@
             for (let i = 0; i <= m; i++) {
                 for (let j = 0; j <= n; j++) {
                     // Calculate x, y, and z
-                    let theta = (i * Math.PI) / m;         // Latitude angle
-                    let phi = (2 * j * Math.PI) / n;      // Longitude angle
+                    let theta = (i * Math.PI) / m;  
+                    let phi = (2 * j * Math.PI) / n;
                     let x = r * Math.sin(theta) * Math.cos(phi);
                     let y = r * Math.cos(theta);
                     let z = r * Math.sin(theta) * Math.sin(phi);
@@ -673,6 +675,7 @@
 
             gl.uniformMatrix3fv(shaderProgram.uNMatrix, false, normalMatrix);
         }
+
         function uploadProjectionMatrixToShader() {
             gl.uniformMatrix4fv(shaderProgram.uniformProjMatrix, false, projectionMatrix);
         }
@@ -764,7 +767,7 @@
 
             let lightDirection = [-5.0, -5.0, -5.0];
             gl.uniform3fv(goldenShaderProgram.uLightDirection, lightDirection);
-            gl.uniform3fv(goldenShaderProgram.uLightColor, [1.0, 1.0, 1.0]); // White light
+            gl.uniform3fv(goldenShaderProgram.uLightColor, [1.0, 1.0, 1.0]);
 
             gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
             gl.vertexAttribPointer(
@@ -942,7 +945,7 @@
             mat4.perspective(60, gl.viewportWidth / gl.viewportHeight, 0.1, 500.0, projectionMatrix);
             mat4.identity(modelViewMatrix);
             mat4.lookAt([rotateX, rotateY, zoomValue], [moveX, moveY, 0], [0, 1, 0], modelViewMatrix);
-            setLightingUniforms();
+            setUpLighting();
             uploadProjectionMatrixToShader();
             uploadModelViewMatrixToShader();
 
@@ -1047,35 +1050,37 @@
 
                     function onMouseMove(event) {
                         if (event.clientY < lastY) {
-                            if (rotateY < 200) {
-                                rotateY += 5;
-                                console.log("user JUST dragging up", rotateY);
-                            } else {
-                                console.log("TOO HIGH BRUH!!!!!!!!!!!!!!!!!!!");
-                            }
-                        } else if (event.clientY > lastY) {
                             if (rotateY > -200) {
                                 rotateY -= 5;
                                 console.log("user JUST dragging down", rotateY);
                             } else {
                                 console.log("TOO LOW BRUH!!!!!!!!!!!!!!!!!!!");
                             }
+                        } else if (event.clientY > lastY) {
+                            if (rotateY < 200) {
+                                rotateY += 5;
+                                console.log("user JUST dragging up", rotateY);
+                            } else {
+                                console.log("TOO HIGH BRUH!!!!!!!!!!!!!!!!!!!");
+                            }
+                            
                         }
                         lastY = event.clientY;
 
                         if (event.clientX < lastX) {
-                            if (rotateX > -200) {
-                                rotateX -= 5;
-                                console.log("user JUST dragging left", rotateX);
-                            } else {
-                                console.log("TOO LEFT BRUH!!!!!!!!!!!!!!!!!!!");
-                            }
-                        } else if (event.clientX > lastX) {
                             if (rotateX < 200) {
                                 rotateX += 5;
                                 console.log("user JUST dragging right", rotateX);
                             } else {
                                 console.log("TOO RIGHT BRUH!!!!!!!!!!!!!!!!!!!");
+                            }
+                            
+                        } else if (event.clientX > lastX) {
+                            if (rotateX > -200) {
+                                rotateX -= 5;
+                                console.log("user JUST dragging left", rotateX);
+                            } else {
+                                console.log("TOO LEFT BRUH!!!!!!!!!!!!!!!!!!!");
                             }
                         }
                         lastX = event.clientX;
@@ -1100,7 +1105,7 @@
         }
 
         function tick() {
-            requestAnimationFrame(tick);
+            requestAnimationFrame(tick); // better than setInterval and makes it nice for high refresh rate monitors
             drawScene(zoomValue, rotateX, rotateY, moveX, moveY);
             animate();
         }
